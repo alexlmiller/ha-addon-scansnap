@@ -3,8 +3,11 @@
 # Called by scanbd with $SCANBD_DEVICE set to the SANE device string.
 set -euo pipefail
 
+# Log immediately to confirm scanbd is calling this script
+echo "[scan.sh] TRIGGERED by scanbd — device: ${SCANBD_DEVICE:-unknown} action: ${SCANBD_ACTION:-unknown}" >&2
+
 # Load configuration written by run.sh (bashio context not available here)
-source /etc/scanbd/addon.conf
+source /etc/scanbd/addon.conf || { echo "[scan.sh] ERROR: failed to source /etc/scanbd/addon.conf" >&2; exit 1; }
 
 WORKDIR=$(mktemp -d /tmp/scan-XXXXXX)
 trap 'rm -rf "$WORKDIR"' EXIT

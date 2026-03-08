@@ -41,11 +41,20 @@ bashio::log.info "Scan resolution: ${SCAN_RESOLUTION} dpi"
 bashio::log.info "Waiting for USB devices to settle..."
 sleep 3
 
-# Log detected SANE devices (informational)
+# Log detected SANE devices
 bashio::log.info "Detected SANE devices:"
 scanimage -L 2>&1 | while IFS= read -r line; do
     bashio::log.info "  ${line}"
 done || true
+
+# Log all scanner options so we can verify the button option name
+bashio::log.info "Scanner options (for button filter debugging):"
+DEVICE=$(scanimage -L 2>/dev/null | grep -o "'[^']*'" | head -1 | tr -d "'")
+if [[ -n "${DEVICE}" ]]; then
+    scanimage -d "${DEVICE}" --all-options 2>&1 | while IFS= read -r line; do
+        bashio::log.info "  ${line}"
+    done || true
+fi
 
 # Start scanbd in foreground; it polls the scanner button and calls scan.sh
 bashio::log.info "Starting scanbd button daemon..."
