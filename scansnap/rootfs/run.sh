@@ -37,9 +37,6 @@ bashio::log.info "Nextcloud URL: ${NEXTCLOUD_URL}"
 bashio::log.info "OCR language: ${OCR_LANGUAGE}"
 bashio::log.info "Scan resolution: ${SCAN_RESOLUTION} dpi"
 
-# Ensure scanbd pid directory exists
-mkdir -p /var/run/scanbd
-
 # Wait for USB to settle after container start
 bashio::log.info "Waiting for USB devices to settle..."
 sleep 3
