@@ -167,6 +167,16 @@ def close_usb(dev: usb.core.Device) -> None:
         if drained:
             log(f"Drained {drained} residual byte(s) from bulk IN endpoint")
 
+        # 2. Clear any halt/stall condition on the bulk endpoints before
+        #    SANE opens the scanner. This is less invasive than a device
+        #    reset and avoids touching configuration/interface state.
+        for endpoint in (EP_OUT, EP_IN):
+            try:
+                dev.clear_halt(endpoint)
+                log(f"Cleared halt state on endpoint 0x{endpoint:02x}")
+            except Exception as e:
+                log(f"clear_halt warning on 0x{endpoint:02x} (non-fatal): {e}")
+
         usb.util.release_interface(dev, USB_INTERFACE)
         if kernel_driver_detached:
             try:
