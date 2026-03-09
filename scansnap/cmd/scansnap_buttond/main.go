@@ -21,7 +21,7 @@ const (
 func main() {
 	log.Printf("Starting ScanSnap iX500 single-owner daemon")
 	log.Printf("Button press starts scan -> OCR -> upload pipeline")
-	log.Printf("USB-native scan path currently uses fixed duplex/color/600dpi behavior")
+	log.Printf("USB-native low-level scan profile: %s", activeScanProfile())
 
 	var lastScan time.Time
 	for {
@@ -41,6 +41,14 @@ func main() {
 		}
 		time.Sleep(2 * time.Second)
 	}
+}
+
+func activeScanProfile() string {
+	profile := os.Getenv("SCAN_PROFILE")
+	if profile == "" {
+		return string(fss500.ProfileStable600)
+	}
+	return profile
 }
 
 func waitLoop(dev *usb.Device, lastScan *time.Time) error {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"scansnap_buttond/internal/fss500"
@@ -12,21 +13,56 @@ import (
 	"scansnap_buttond/internal/usb"
 )
 
+type Config struct {
+	Profile  fss500.ScanProfile
+	Geometry fss500.ScanGeometry
+}
+
+func configFromEnv() Config {
+	profile := fss500.ScanProfile(strings.TrimSpace(os.Getenv("SCAN_PROFILE")))
+	switch profile {
+	case fss500.ProfileTest300ResolutionOnly:
+		return Config{
+			Profile: profile,
+			Geometry: fss500.ScanGeometry{
+				Resolution: 300,
+				WidthPx:    4960,
+				HeightPx:   7016,
+			},
+		}
+	case fss500.ProfileTest300Geometry:
+		return Config{
+			Profile: profile,
+			Geometry: fss500.ScanGeometry{
+				Resolution: 300,
+				WidthPx:    2480,
+				HeightPx:   3508,
+			},
+		}
+	default:
+		return Config{
+			Profile: fss500.ProfileStable600,
+			Geometry: fss500.ScanGeometry{
+				Resolution: 600,
+				WidthPx:    4960,
+				HeightPx:   7016,
+			},
+		}
+	}
+}
+
 func ScanToDir(dev *usb.Device, dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
-	geometry := fss500.ScanGeometry{
-		Resolution: 600,
-		WidthPx:    4960,
-		HeightPx:   7016,
-	}
+	cfg := configFromEnv()
+	geometry := cfg.Geometry
 
 	if err := fss500.Inquire(dev); err != nil {
 		return err
 	}
-	if err := fss500.Preread(dev, geometry); err != nil {
+	if err := fss500.Preread(dev, geometry, cfg.Profile); err != nil {
 		return err
 	}
 	if err := fss500.ModeSelectAuto(dev); err != nil {
@@ -47,7 +83,7 @@ func ScanToDir(dev *usb.Device, dir string) error {
 	if err := fss500.ModeSelectPrepick(dev); err != nil {
 		return err
 	}
-	if err := fss500.SetWindow(dev, geometry); err != nil {
+	if err := fss500.SetWindow(dev, geometry, cfg.Profile); err != nil {
 		return err
 	}
 	if err := fss500.SendLut(dev); err != nil {
