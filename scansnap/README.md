@@ -48,16 +48,18 @@ This add-on uses Nextcloud's **File Drop** feature — an upload-only share that
 | `scan_color` | `Color` | Color mode: `Color`, `Gray`, or `Lineart` |
 
 Current limitation: the single-owner USB scanner path is stable, but the low-level duplex/color controls are still not fully mapped to the Home Assistant options.
+`scan_profile` is the scanner-mode control that matters today; `scan_duplex` and `scan_color` remain reserved until the USB-native path is mapped more fully.
 
 ## How It Works
 
 1. **Button detection** — A dedicated Go daemon owns the iX500 over raw USB and polls its hardware status directly. This avoids the fragile USB handoff between button polling and SANE.
 2. **Scan** — The same USB owner drives the scanner end-to-end and writes raw page JPEGs into a temporary working directory.
-3. **Blank page removal** — Pages where >97% of pixels are near-white are discarded, eliminating blank duplex reverses from single-sided originals.
+3. **Blank page removal** — Heuristic image analysis removes blank duplex reverses from single-sided originals while keeping real printed pages.
 4. **PDF assembly** — `img2pdf` combines the remaining pages into a lossless PDF.
 5. **OCR** — `ocrmypdf` produces a searchable PDF/A with auto-rotation and deskew.
 6. **Smart filename** — The OCR text is analysed locally (no external API) to extract a document date, organisation name, and document type, producing a filename like `2026-03-07 - Chase Bank Statement.pdf`.
 7. **Destination dispatch** — The finished PDF is handed to the configured storage backend. `nextcloud` and `seafile` are implemented.
+
 ## Scanner On/Off Behaviour
 
 The daemon handles the scanner being powered on and off at any time. When the scanner is off it retries every 5 seconds; when it comes back it resumes polling immediately.
