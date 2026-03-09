@@ -45,7 +45,7 @@ type Config struct {
 func configFromEnv() Config {
 	profile := fss500.ScanProfile(strings.TrimSpace(os.Getenv("SCAN_PROFILE")))
 	switch profile {
-	case fss500.ProfileTest300ResolutionOnly:
+	case fss500.ProfileStable300, fss500.ProfileTest300ResolutionOnly:
 		return Config{
 			Profile: profile,
 			Geometry: fss500.ScanGeometry{
@@ -65,9 +65,9 @@ func configFromEnv() Config {
 		}
 	default:
 		return Config{
-			Profile: fss500.ProfileStable600,
+			Profile: fss500.ProfileStable300,
 			Geometry: fss500.ScanGeometry{
-				Resolution: 600,
+				Resolution: 300,
 				WidthPx:    4960,
 				HeightPx:   7016,
 			},

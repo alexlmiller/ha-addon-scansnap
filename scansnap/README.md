@@ -25,11 +25,12 @@ This add-on uses Nextcloud's **File Drop** feature — an upload-only share that
 | `nextcloud_share_token` | — | The share token from your File Drop link |
 | `nextcloud_share_password` | _(empty)_ | Password for the share, if set |
 | `scan_resolution` | `300` | Scan resolution in DPI (150 / 300 / 600) |
+| `scan_profile` | `stable_300` | Low-level USB scan profile. `stable_300` is the normal default, `stable_600` is a fallback, and `test_300_resolution_geometry` remains experimental. |
 | `ocr_language` | `eng` | Tesseract language code(s) — e.g. `eng`, `fra`, `eng+fra` |
 | `scan_duplex` | `true` | Scan both sides of each page (ADF Duplex). Blank reverses are removed automatically. |
 | `scan_color` | `Color` | Color mode: `Color`, `Gray`, or `Lineart` |
 
-Current limitation: the new single-owner USB scanner path is fixed to the scanner's native duplex color settings while it is being brought up. The OCR/upload pipeline remains configurable and modular, but the low-level USB scan settings are not fully mapped to the Home Assistant options yet.
+Current limitation: the single-owner USB scanner path is now stable at 300dpi, but the low-level duplex/color controls are still not fully mapped to the Home Assistant options. The OCR/upload pipeline is modular, and `nextcloud` is the first implemented storage backend.
 
 ## How It Works
 

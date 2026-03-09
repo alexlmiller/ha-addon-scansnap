@@ -45,11 +45,17 @@ bashio::log.info "OCR language: ${OCR_LANGUAGE}"
 bashio::log.info "Storage backend: ${STORAGE_BACKEND}"
 bashio::log.info "Configured scan mode: ${SCAN_RESOLUTION} dpi | color: ${SCAN_COLOR} | duplex: ${SCAN_DUPLEX}"
 bashio::log.info "Low-level scan profile: ${SCAN_PROFILE}"
-if [ "${SCAN_PROFILE}" = "stable_600" ]; then
-    bashio::log.warning "USB-native scanning is using the stable fixed duplex/color/600dpi profile"
-else
-    bashio::log.warning "USB-native scanning is using the faster 300dpi test profile by default: ${SCAN_PROFILE}"
-fi
+case "${SCAN_PROFILE}" in
+    stable_300|test_300_resolution_only)
+        bashio::log.info "USB-native scanning is using the stable 300dpi profile"
+        ;;
+    stable_600)
+        bashio::log.warning "USB-native scanning is using the legacy 600dpi fallback profile"
+        ;;
+    *)
+        bashio::log.warning "USB-native scanning is using an experimental low-level profile: ${SCAN_PROFILE}"
+        ;;
+esac
 
 # Wait for USB to settle after container start
 bashio::log.info "Waiting for USB devices to settle..."

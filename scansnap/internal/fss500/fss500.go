@@ -38,6 +38,7 @@ type ScanProfile string
 
 const (
 	ProfileStable600             ScanProfile = "stable_600"
+	ProfileStable300             ScanProfile = "stable_300"
 	ProfileTest300ResolutionOnly ScanProfile = "test_300_resolution_only"
 	ProfileTest300Geometry       ScanProfile = "test_300_resolution_geometry"
 )
@@ -208,7 +209,7 @@ func Inquire(dev io.ReadWriter) error {
 // Preread switches the scanner into 600 dpi scan mode.
 func prereadPayload(profile ScanProfile, geometry ScanGeometry) []byte {
 	switch profile {
-	case ProfileTest300ResolutionOnly, ProfileTest300Geometry:
+	case ProfileStable300, ProfileTest300ResolutionOnly, ProfileTest300Geometry:
 		return append([]byte("SET PRE READMODE"),
 			byte(geometry.Resolution>>8),
 			byte(geometry.Resolution),
@@ -536,7 +537,7 @@ func setWindowPayload(profile ScanProfile, geometry ScanGeometry) []byte {
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		}
-	case ProfileTest300ResolutionOnly:
+	case ProfileStable300, ProfileTest300ResolutionOnly:
 		return []byte{
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, byte(geometry.Resolution >> 8), byte(geometry.Resolution), byte(geometry.Resolution >> 8), byte(geometry.Resolution), 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x26, 0xc0, 0x00, 0x00, 0x36, 0xd0, 0x00, 0x00,
