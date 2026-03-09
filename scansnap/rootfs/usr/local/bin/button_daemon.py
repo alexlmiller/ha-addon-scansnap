@@ -121,8 +121,29 @@ def open_usb() -> usb.core.Device | None:
 
 
 def close_usb(dev: usb.core.Device) -> None:
-    """Release USB interface so SANE can open the scanner."""
+    """Release USB interface so SANE can open the scanner cleanly."""
     try:
+        # 1. Drain any residual bytes the scanner queued in the host-side
+        #    USB buffer from our last GET_HW_STATUS poll.
+        drained = 0
+        for _ in range(8):
+            try:
+                chunk = bytes(dev.read(EP_IN, 512, timeout=50))
+                drained += len(chunk)
+            except usb.core.USBError:
+                break
+        if drained:
+            log(f"Drained {drained} residual byte(s) from bulk IN endpoint")
+
+        # 2. Send SET_INTERFACE(0, 0) to reset DATA toggle bits on both
+        #    endpoints back to DATA0.  SANE's first bulk transfer will then
+        #    sync correctly without needing a full USB device reset.
+        try:
+            dev.set_interface_altsetting(USB_INTERFACE, 0)
+            log("Endpoint DATA toggles reset via SET_INTERFACE(0, 0)")
+        except Exception as e:
+            log(f"SET_INTERFACE warning (non-fatal): {e}")
+
         usb.util.release_interface(dev, USB_INTERFACE)
         usb.util.dispose_resources(dev)
         log("USB interface released for SANE")

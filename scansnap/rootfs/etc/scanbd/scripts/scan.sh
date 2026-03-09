@@ -44,8 +44,9 @@ fi
 log "Scanning with device: ${SCANBD_DEVICE:-fujitsu} | source: ${SCAN_SOURCE} | mode: ${SCAN_COLOR:-Color} | ${SCAN_RESOLUTION:-300} dpi..."
 
 # Verbose SANE debug output so we can diagnose sane_start failures.
-# Shows every USB command/response — remove once scanning is confirmed working.
-export SANE_DEBUG_FUJITSU=3
+# Level 35 = max, shows every USB command/response at the SCSI level.
+# Remove once scanning is confirmed working.
+export SANE_DEBUG_FUJITSU=35
 
 scanimage \
     -d "${SCANBD_DEVICE}" \
