@@ -54,6 +54,7 @@ HTTP_PORT     = int(os.environ.get("INGRESS_PORT", "8099"))
 # Set by the HTTP handler; consumed by the poll loop
 http_scan_request = threading.Event()
 last_status_debug = None
+kernel_driver_detached = False
 
 
 def log(msg):
@@ -115,6 +116,7 @@ def log_status_change(status: bytes | None) -> None:
 
 def open_usb() -> usb.core.Device | None:
     """Find the iX500 and claim interface 0 for button polling."""
+    global kernel_driver_detached
     dev = usb.core.find(idVendor=VENDOR_ID, idProduct=PRODUCT_ID)
     if dev is None:
         # Log all visible USB devices to aid diagnosis
@@ -133,9 +135,12 @@ def open_usb() -> usb.core.Device | None:
     try:
         if dev.is_kernel_driver_active(USB_INTERFACE):
             dev.detach_kernel_driver(USB_INTERFACE)
+            kernel_driver_detached = True
             log("Detached kernel driver from USB interface 0")
+        else:
+            kernel_driver_detached = False
     except Exception:
-        pass
+        kernel_driver_detached = False
     dev.set_configuration()
     usb.util.claim_interface(dev, USB_INTERFACE)
     log("USB interface 0 claimed — polling for button press")
@@ -144,6 +149,7 @@ def open_usb() -> usb.core.Device | None:
 
 def close_usb(dev: usb.core.Device) -> None:
     """Release USB interface so SANE can open the scanner cleanly."""
+    global kernel_driver_detached
     try:
         # 1. Drain any residual bytes the scanner queued in the host-side
         #    USB buffer from our last GET_HW_STATUS poll.
@@ -167,6 +173,12 @@ def close_usb(dev: usb.core.Device) -> None:
             log(f"SET_INTERFACE warning (non-fatal): {e}")
 
         usb.util.release_interface(dev, USB_INTERFACE)
+        if kernel_driver_detached:
+            try:
+                dev.attach_kernel_driver(USB_INTERFACE)
+                log("Re-attached kernel driver to USB interface 0")
+            except Exception as e:
+                log(f"attach_kernel_driver warning (non-fatal): {e}")
         usb.util.dispose_resources(dev)
         log("USB interface released for SANE")
     except Exception as e:

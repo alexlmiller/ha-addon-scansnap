@@ -41,6 +41,15 @@ run_scanimage() {
     fi
 }
 
+try_scanimage() {
+    local device_arg="$1"
+    set +e
+    run_scanimage "${device_arg}"
+    local rc=$?
+    set -e
+    return "${rc}"
+}
+
 notify_ha() {
     local title="$1"
     local message="$2"
@@ -74,11 +83,11 @@ scanimage -L 2>&1 | while IFS= read -r line; do
 done || true
 
 SCAN_EXIT=0
-if ! run_scanimage "${SCANBD_DEVICE:-}"; then
+if ! try_scanimage "${SCANBD_DEVICE:-}"; then
     SCAN_EXIT=$?
     log "scanimage failed with configured device (${SCAN_EXIT}); retrying with default device selection"
     rm -f "${WORKDIR}"/page_*.tiff
-    if ! run_scanimage ""; then
+    if ! try_scanimage ""; then
         SCAN_EXIT=$?
         fail "scanimage failed to open the scanner (last exit ${SCAN_EXIT})"
     fi
