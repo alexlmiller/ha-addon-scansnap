@@ -1,3 +1,5 @@
+ARG BUILD_FROM
+
 FROM golang:1.24-bookworm AS builder
 
 WORKDIR /src
@@ -7,7 +9,6 @@ COPY internal ./internal
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/scansnap_buttond ./cmd/scansnap_buttond
 
-ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
