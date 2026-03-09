@@ -124,6 +124,14 @@ def close_usb(dev: usb.core.Device) -> None:
     """Release USB interface so SANE can open the scanner."""
     try:
         usb.util.release_interface(dev, USB_INTERFACE)
+        # Reset the USB device so SANE gets a clean state.
+        # This flushes the scanner's endpoint buffers, clearing any stale
+        # bytes from our bulk polling that would confuse sane_start().
+        try:
+            dev.reset()
+            log("USB device reset for clean SANE handoff")
+        except Exception as e:
+            log(f"USB reset warning (non-fatal): {e}")
         usb.util.dispose_resources(dev)
         log("USB interface released for SANE")
     except Exception as e:
@@ -166,9 +174,10 @@ def run_scan(dev: usb.core.Device, source: str) -> usb.core.Device | None:
     result = subprocess.run([SCAN_SCRIPT], env=env)
     log(f"scan.sh exited with code {result.returncode}")
 
-    # Give SANE a moment to release the device before we reclaim it
-    log("Waiting 2s for SANE to release USB…")
-    time.sleep(2)
+    # Give the scanner time to recover from the USB reset before SANE opens it,
+    # and give SANE time to release the device before we reclaim it after scanning.
+    log("Waiting 4s for scanner to settle and SANE to release USB…")
+    time.sleep(4)
 
     new_dev = open_usb()
     if new_dev is None:
