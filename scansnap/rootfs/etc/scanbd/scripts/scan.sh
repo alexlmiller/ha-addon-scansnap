@@ -149,6 +149,7 @@ ocrmypdf \
     --rotate-pages \
     --deskew \
     --clean-final \
+    -O 2 \
     --output-type pdfa \
     -l "${OCR_LANGUAGE:-eng}" \
     "${RAW_PDF}" "${OCR_PDF}" \

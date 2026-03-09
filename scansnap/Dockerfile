@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # OCR pipeline
     ocrmypdf \
     unpaper \
+    pngquant \
     # Lossless TIFF→PDF assembly
     img2pdf \
     # Text extraction from OCR'd PDF

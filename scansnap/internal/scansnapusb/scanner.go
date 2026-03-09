@@ -157,7 +157,7 @@ func ScanToDir(dev *usb.Device, dir string) error {
 		states := [2]*pageState{}
 		for side := 0; side < 2; side++ {
 			var buf bytes.Buffer
-			enc, err := turbojpeg.NewEncoder(&buf, 75, geometry.WidthPx, geometry.HeightPx)
+			enc, err := turbojpeg.NewEncoder(&buf, 65, geometry.WidthPx, geometry.HeightPx)
 			if err != nil {
 				return err
 			}
