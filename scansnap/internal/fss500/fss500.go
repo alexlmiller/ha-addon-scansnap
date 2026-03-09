@@ -28,6 +28,12 @@ import (
 	"time"
 )
 
+type ScanGeometry struct {
+	Resolution int
+	WidthPx    int
+	HeightPx   int
+}
+
 var (
 	// ErrShortRead represents a short read when transferring data.
 	ErrShortRead = errors.New("short read")
@@ -192,7 +198,7 @@ func Inquire(dev io.ReadWriter) error {
 }
 
 // Preread switches the scanner into 600 dpi scan mode.
-func Preread(dev io.ReadWriter) error {
+func Preread(dev io.ReadWriter, geometry ScanGeometry) error {
 	// request:
 	// 000: 43 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 C...............
 	// 010: 00 00 00 1d 00 00 00 20 00 00 00 00 00 00 00    ....... .......
@@ -202,21 +208,18 @@ func Preread(dev io.ReadWriter) error {
 	// 010: 02 58 02 58 00 00 26 c3 00 00 36 d1 05 7f 00 00 .X.X..&...6.....
 
 	extra := append([]byte("SET PRE READMODE"),
-		0x02, // x resolution: hi byte
-		0x58, // x resolution: lo byte (→ 600 dpi)
-
-		0x02, // y resolution: hi byte
-		0x58, // y resolution: lo byte (→ 600 dpi)
-
-		0x00, // paper width
-		0x00, // paper width
-		0x26, // paper width
-		0xc3, // paper width
-
-		0x00, // paper length
-		0x00, // paper length
-		0x36, // paper length
-		0xd1, // paper length
+		byte(geometry.Resolution>>8),
+		byte(geometry.Resolution),
+		byte(geometry.Resolution>>8),
+		byte(geometry.Resolution),
+		byte(geometry.WidthPx>>24),
+		byte(geometry.WidthPx>>16),
+		byte(geometry.WidthPx>>8),
+		byte(geometry.WidthPx),
+		byte(geometry.HeightPx>>24),
+		byte(geometry.HeightPx>>16),
+		byte(geometry.HeightPx>>8),
+		byte(geometry.HeightPx),
 
 		0x05, // composition
 		0x7f, // TODO: where does this come from/what does it mean?
@@ -474,7 +477,7 @@ func ModeSelectPrepick(dev io.ReadWriter) error {
 
 // SetWindow sets a window for scanning, specifying parameters such as
 // the brightness, threshold, contrast, compression type, etc.
-func SetWindow(dev io.ReadWriter) error {
+func SetWindow(dev io.ReadWriter, geometry ScanGeometry) error {
 	// request:
 	// 000: 43 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 C...............
 	// 010: 00 00 00 24 00 00 00 00 00 00 00 88 00 00 00    ...$...........
@@ -490,6 +493,35 @@ func SetWindow(dev io.ReadWriter) error {
 	// 070: c1 80 01 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
 	// 080: 00 00 00 00 00 00 00 00                         ........
 
+	extra := []byte{ // window descriptor, see also https://www.staff.uni-mainz.de/tacke/scsi/SCSI2-15.html#tab282
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40,
+		0x00, 0x00, byte(geometry.Resolution >> 8), byte(geometry.Resolution),
+		byte(geometry.Resolution >> 8), byte(geometry.Resolution), 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		byte((geometry.WidthPx - 3) >> 8), byte(geometry.WidthPx - 3),
+		0x00, 0x00,
+		byte((geometry.HeightPx - 1) >> 8), byte(geometry.HeightPx - 1),
+		0x00, 0x00,
+		0x00, 0x05, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0xc1, 0x80, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00,
+		byte(geometry.WidthPx >> 24), byte(geometry.WidthPx >> 16), byte(geometry.WidthPx >> 8), byte(geometry.WidthPx),
+		byte(geometry.HeightPx >> 24), byte(geometry.HeightPx >> 16), byte(geometry.HeightPx >> 8), byte(geometry.HeightPx),
+		0x80, 0x00, byte(geometry.Resolution >> 8), byte(geometry.Resolution),
+		byte(geometry.Resolution >> 8), byte(geometry.Resolution), 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		byte((geometry.WidthPx - 3) >> 8), byte(geometry.WidthPx - 3),
+		0x00, 0x00,
+		byte((geometry.HeightPx - 1) >> 8), byte(geometry.HeightPx - 1),
+		0x00, 0x00,
+		0x00, 0x05, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0xc1, 0x80, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	}
+
 	_, err := do(dev, &request{
 		cmd: []byte{
 			0x24, // SCSI opcode: set window
@@ -504,17 +536,7 @@ func SetWindow(dev io.ReadWriter) error {
 			0x88, // transfer length (LSB): 136 bytes */
 			0x00, // control
 		},
-		extra: []byte{ // window descriptor, see also https://www.staff.uni-mainz.de/tacke/scsi/SCSI2-15.html#tab282
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x02, 0x58, 0x02, 0x58, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x26, 0xc0, 0x00, 0x00, 0x36, 0xd0, 0x00, 0x00,
-			0x00, 0x05, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			0xc1, 0x80, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00,
-			0x26, 0xc3, 0x00, 0x00, 0x36, 0xd1, 0x00, 0x00, 0x80, 0x00, 0x02, 0x58, 0x02, 0x58, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x26, 0xc0, 0x00, 0x00, 0x36, 0xd0, 0x00, 0x00,
-			0x00, 0x05, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			0xc1, 0x80, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		},
+		extra: extra,
 	})
 
 	return err
@@ -794,7 +816,7 @@ func StartScan(dev io.ReadWriter) error {
 }
 
 // GetPixelSize requests the pixel size of the object being scanned.
-func GetPixelSize(dev io.ReadWriter) error {
+func GetPixelSize(dev io.ReadWriter) (ScanGeometry, error) {
 	// request:
 	// 000: 43 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 C...............
 	// 010: 00 00 00 28 00 80 00 00 00 00 00 20 00 00 00    ...(....... ...
@@ -812,7 +834,7 @@ func GetPixelSize(dev io.ReadWriter) error {
 
 	// → bytes per line = scan_x * 3 (for color) = 14880
 
-	_, err := do(dev, &request{
+	resp, err := do(dev, &request{
 		cmd: []byte{
 			0x28, // SCSI opcode: READ
 			0x00, // reserved
@@ -828,7 +850,16 @@ func GetPixelSize(dev io.ReadWriter) error {
 		},
 		respLen: 32,
 	})
-	return err
+	if err != nil {
+		return ScanGeometry{}, err
+	}
+	if len(resp.Extra) < 8 {
+		return ScanGeometry{}, errors.New("short pixel size response")
+	}
+	return ScanGeometry{
+		WidthPx:  int(binary.BigEndian.Uint32(resp.Extra[0:4])),
+		HeightPx: int(binary.BigEndian.Uint32(resp.Extra[4:8])),
+	}, nil
 }
 
 // TODO: document Ric

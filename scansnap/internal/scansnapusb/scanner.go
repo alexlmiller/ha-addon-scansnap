@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"scansnap_buttond/internal/fss500"
@@ -12,15 +13,32 @@ import (
 	"scansnap_buttond/internal/usb"
 )
 
+func scanGeometryFromEnv() fss500.ScanGeometry {
+	resolution := 300
+	if raw := os.Getenv("SCAN_RESOLUTION"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && (parsed == 150 || parsed == 300 || parsed == 600) {
+			resolution = parsed
+		}
+	}
+
+	return fss500.ScanGeometry{
+		Resolution: resolution,
+		WidthPx:    resolution * 827 / 100,
+		HeightPx:   resolution * 1169 / 100,
+	}
+}
+
 func ScanToDir(dev *usb.Device, dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
+	geometry := scanGeometryFromEnv()
+
 	if err := fss500.Inquire(dev); err != nil {
 		return err
 	}
-	if err := fss500.Preread(dev); err != nil {
+	if err := fss500.Preread(dev, geometry); err != nil {
 		return err
 	}
 	if err := fss500.ModeSelectAuto(dev); err != nil {
@@ -41,7 +59,7 @@ func ScanToDir(dev *usb.Device, dir string) error {
 	if err := fss500.ModeSelectPrepick(dev); err != nil {
 		return err
 	}
-	if err := fss500.SetWindow(dev); err != nil {
+	if err := fss500.SetWindow(dev, geometry); err != nil {
 		return err
 	}
 	if err := fss500.SendLut(dev); err != nil {
@@ -72,8 +90,15 @@ func ScanToDir(dev *usb.Device, dir string) error {
 		if err := fss500.StartScan(dev); err != nil {
 			return fmt.Errorf("start scan: %w", err)
 		}
-		if err := fss500.GetPixelSize(dev); err != nil {
+		pixelSize, err := fss500.GetPixelSize(dev)
+		if err != nil {
 			return fmt.Errorf("get pixel size: %w", err)
+		}
+		if pixelSize.WidthPx > 0 {
+			geometry.WidthPx = pixelSize.WidthPx
+		}
+		if pixelSize.HeightPx > 0 {
+			geometry.HeightPx = pixelSize.HeightPx
 		}
 
 		type pageState struct {
@@ -84,14 +109,14 @@ func ScanToDir(dev *usb.Device, dir string) error {
 		states := [2]*pageState{}
 		for side := 0; side < 2; side++ {
 			var buf bytes.Buffer
-			enc, err := turbojpeg.NewEncoder(&buf, 75, 4960, 7016)
+			enc, err := turbojpeg.NewEncoder(&buf, 75, geometry.WidthPx, geometry.HeightPx)
 			if err != nil {
 				return err
 			}
 			states[side] = &pageState{
 				buf:  &buf,
 				enc:  enc,
-				rest: make([]byte, 0, 16*3*4960),
+				rest: make([]byte, 0, 16*3*geometry.WidthPx),
 			}
 		}
 
@@ -113,12 +138,12 @@ func ScanToDir(dev *usb.Device, dir string) error {
 
 				state := states[side]
 				buf := append(state.rest, resp.Extra...)
-				height := len(buf) / 3 / 4960
-				chunk := buf[:((height/16)*16)*3*4960]
+				height := len(buf) / 3 / geometry.WidthPx
+				chunk := buf[:((height/16)*16)*3*geometry.WidthPx]
 				state.rest = buf[len(chunk):]
 
 				if len(chunk) > 0 {
-					state.enc.EncodePixels(chunk, len(chunk)/3/4960)
+					state.enc.EncodePixels(chunk, len(chunk)/3/geometry.WidthPx)
 				}
 
 				if err == fss500.ErrEndOfPaper && side == 1 {
@@ -133,7 +158,7 @@ func ScanToDir(dev *usb.Device, dir string) error {
 
 		for _, state := range states {
 			if len(state.rest) > 0 {
-				state.enc.EncodePixels(state.rest, len(state.rest)/3/4960)
+				state.enc.EncodePixels(state.rest, len(state.rest)/3/geometry.WidthPx)
 			}
 			if err := state.enc.Flush(); err != nil {
 				return err

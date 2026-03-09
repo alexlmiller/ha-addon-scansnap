@@ -37,19 +37,71 @@ fail() {
 }
 
 upload_pdf() {
+    local encoded_filename
+    local http_code
+    local webdav_url
+
+    nextcloud_put() {
+        local url="$1"
+        local auth_mode="$2"
+
+        case "${auth_mode}" in
+            modern)
+                if [ -n "${NEXTCLOUD_SHARE_PASSWORD:-}" ]; then
+                    curl -s -o /dev/null -w "%{http_code}" \
+                        -X PUT \
+                        -u "anonymous:${NEXTCLOUD_SHARE_PASSWORD}" \
+                        -H "Content-Type: application/pdf" \
+                        --data-binary @"${OCR_PDF}" \
+                        "${url}"
+                else
+                    curl -s -o /dev/null -w "%{http_code}" \
+                        -X PUT \
+                        -H "Content-Type: application/pdf" \
+                        --data-binary @"${OCR_PDF}" \
+                        "${url}"
+                fi
+                ;;
+            legacy)
+                curl -s -o /dev/null -w "%{http_code}" \
+                    -X PUT \
+                    -u "${NEXTCLOUD_SHARE_TOKEN}:${NEXTCLOUD_SHARE_PASSWORD}" \
+                    -H "Content-Type: application/pdf" \
+                    --data-binary @"${OCR_PDF}" \
+                    "${url}"
+                ;;
+            *)
+                return 99
+                ;;
+        esac
+    }
+
     case "${STORAGE_BACKEND:-nextcloud}" in
         nextcloud)
-            local encoded_filename
-            local webdav_url
             encoded_filename=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${FILENAME}")
-            webdav_url="${NEXTCLOUD_URL}/public.php/webdav/${encoded_filename}"
-            log "Uploading to Nextcloud: ${webdav_url}" >&2
-            curl -s -o /dev/null -w "%{http_code}" \
-                -X PUT \
-                -u "${NEXTCLOUD_SHARE_TOKEN}:${NEXTCLOUD_SHARE_PASSWORD}" \
-                -H "Content-Type: application/pdf" \
-                --data-binary @"${OCR_PDF}" \
-                "${webdav_url}"
+            webdav_url="${NEXTCLOUD_URL}/public.php/dav/files/${NEXTCLOUD_SHARE_TOKEN}/${encoded_filename}"
+            log "Uploading to Nextcloud (modern public DAV): ${webdav_url}" >&2
+            http_code=$(nextcloud_put "${webdav_url}" modern)
+
+            if [ "${http_code}" = "404" ] || [ "${http_code}" = "405" ] || [ "${http_code}" = "501" ]; then
+                webdav_url="${NEXTCLOUD_URL}/public.php/webdav/${encoded_filename}"
+                log "Falling back to legacy public WebDAV endpoint: ${webdav_url}" >&2
+                http_code=$(nextcloud_put "${webdav_url}" legacy)
+            fi
+
+            if [ "${http_code}" = "409" ]; then
+                FILENAME="${FILENAME%.pdf} ($(date +%H%M%S)).pdf"
+                encoded_filename=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${FILENAME}")
+                webdav_url="${NEXTCLOUD_URL}/public.php/dav/files/${NEXTCLOUD_SHARE_TOKEN}/${encoded_filename}"
+                log "Retrying Nextcloud upload with unique filename: ${webdav_url}" >&2
+                http_code=$(nextcloud_put "${webdav_url}" modern)
+                if [ "${http_code}" = "404" ] || [ "${http_code}" = "405" ] || [ "${http_code}" = "501" ]; then
+                    webdav_url="${NEXTCLOUD_URL}/public.php/webdav/${encoded_filename}"
+                    log "Retrying with legacy public WebDAV endpoint: ${webdav_url}" >&2
+                    http_code=$(nextcloud_put "${webdav_url}" legacy)
+                fi
+            fi
+            printf '%s' "${http_code}"
             ;;
         *)
             fail "Unsupported storage backend: ${STORAGE_BACKEND}"
