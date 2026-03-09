@@ -124,14 +124,6 @@ def close_usb(dev: usb.core.Device) -> None:
     """Release USB interface so SANE can open the scanner."""
     try:
         usb.util.release_interface(dev, USB_INTERFACE)
-        # Reset the USB device so SANE gets a clean state.
-        # This flushes the scanner's endpoint buffers, clearing any stale
-        # bytes from our bulk polling that would confuse sane_start().
-        try:
-            dev.reset()
-            log("USB device reset for clean SANE handoff")
-        except Exception as e:
-            log(f"USB reset warning (non-fatal): {e}")
         usb.util.dispose_resources(dev)
         log("USB interface released for SANE")
     except Exception as e:
@@ -170,14 +162,18 @@ def run_scan(dev: usb.core.Device, source: str) -> usb.core.Device | None:
     env["SCANBD_ACTION"] = "scan"
     env["SCANBD_DEVICE"] = conf.get("SCANBD_DEVICE", "fujitsu")
 
+    # Small pause so the OS finishes releasing the USB interface before
+    # SANE tries to open it — without this the device can appear busy.
+    log("Waiting 2s for USB interface to settle before SANE opens device…")
+    time.sleep(2)
+
     log("Invoking scan.sh…")
     result = subprocess.run([SCAN_SCRIPT], env=env)
     log(f"scan.sh exited with code {result.returncode}")
 
-    # Give the scanner time to recover from the USB reset before SANE opens it,
-    # and give SANE time to release the device before we reclaim it after scanning.
-    log("Waiting 4s for scanner to settle and SANE to release USB…")
-    time.sleep(4)
+    # Give SANE time to release the device before we reclaim it for polling.
+    log("Waiting 3s for SANE to release USB before reclaiming…")
+    time.sleep(3)
 
     new_dev = open_usb()
     if new_dev is None:
