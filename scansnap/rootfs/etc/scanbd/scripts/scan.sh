@@ -104,7 +104,8 @@ log "Filename: ${FILENAME}"
 # ── Step 6: Upload to Nextcloud File Drop ────────────────────────────────────
 # File Drop WebDAV endpoint uses share token as both username and path auth.
 # Auth: Basic auth with "{share_token}:{share_password}" (password can be empty)
-WEBDAV_URL="${NEXTCLOUD_URL}/public.php/webdav/${FILENAME}"
+ENCODED_FILENAME=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${FILENAME}")
+WEBDAV_URL="${NEXTCLOUD_URL}/public.php/webdav/${ENCODED_FILENAME}"
 log "Uploading to: ${WEBDAV_URL}"
 
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \

@@ -53,6 +53,7 @@ HTTP_PORT     = int(os.environ.get("INGRESS_PORT", "8099"))
 
 # Set by the HTTP handler; consumed by the poll loop
 http_scan_request = threading.Event()
+last_status_debug = None
 
 
 def log(msg):
@@ -89,6 +90,27 @@ def query_hw_status(dev) -> bytes | None:
 def scan_button_pressed(status: bytes | None) -> bool:
     """True if the ScanSw bit is set in the hw status response."""
     return bool(status and len(status) >= 5 and status[4] & 0x01)
+
+
+def log_status_change(status: bytes | None) -> None:
+    """Log status-byte changes so button/ADF state can be debugged from logs."""
+    global last_status_debug
+    if status is None or len(status) < 5:
+        return
+
+    current = (status[3], status[4])
+    if current == last_status_debug:
+        return
+
+    hopper = "loaded" if status[3] & 0x80 else "empty"
+    button = "pressed" if status[4] & 0x01 else "released"
+    sendsw = "on" if status[4] & 0x04 else "off"
+    log(
+        "HW status changed: "
+        f"byte3=0x{status[3]:02x} byte4=0x{status[4]:02x} "
+        f"(hopper={hopper}, scan_button={button}, send_button={sendsw})"
+    )
+    last_status_debug = current
 
 
 def open_usb() -> usb.core.Device | None:
@@ -234,7 +256,7 @@ SCAN_PAGE = b"""<!DOCTYPE html>
       const btn=document.getElementById('btn');
       const st=document.getElementById('status');
       btn.disabled=true;
-      st.innerText='Starting scan\u2026';
+      st.innerText='Starting scan...';
       fetch('scan',{method:'POST'})
         .then(r=>r.text())
         .then(t=>{st.innerText=t;setTimeout(()=>{btn.disabled=false;st.innerText=''},4000)})
@@ -297,6 +319,7 @@ def main():
                     # Break to the outer loop which will retry open_usb() every 5s.
                     log("USB query failed — scanner disconnected? Reconnecting in 5s…")
                     break
+                log_status_change(status)
                 physical = scan_button_pressed(status)
                 virtual  = http_scan_request.is_set()
 

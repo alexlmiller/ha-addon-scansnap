@@ -48,13 +48,28 @@ bashio::log.info "Scan resolution: ${SCAN_RESOLUTION} dpi | color: ${SCAN_COLOR}
 bashio::log.info "Waiting for USB devices to settle..."
 sleep 3
 
-# Log detected SANE devices (informational only — button detection is via USB bulk transfer)
+# Detect the exact SANE device string instead of hardcoding "fujitsu".
+# The backend exposes names like "fujitsu:ScanSnap iX500:338578", and
+# scanimage rejects the generic backend name as an invalid device id.
+SANE_DEVICE=""
 bashio::log.info "Detected SANE devices:"
-scanimage -L 2>&1 | while IFS= read -r line; do
+while IFS= read -r line; do
     bashio::log.info "  ${line}"
-done || true
+    if [[ -z "${SANE_DEVICE}" && "${line}" =~ device\ \`([^\']+)\'\ is\ a\ .*ScanSnap\ iX500 ]]; then
+        SANE_DEVICE="${BASH_REMATCH[1]}"
+    fi
+done < <(scanimage -L 2>&1 || true)
+
+if bashio::var.is_empty "${SANE_DEVICE}"; then
+    bashio::log.warning "Could not detect a ScanSnap iX500 SANE device; falling back to backend name 'fujitsu'"
+    SANE_DEVICE="fujitsu"
+else
+    bashio::log.info "Using SANE device: ${SANE_DEVICE}"
+fi
 
 # Start the USB button daemon (polls for physical button press via GET_HW_STATUS,
 # also serves the HA ingress panel "Scan Now" button on HTTP_PORT)
 bashio::log.info "Starting ScanSnap button daemon..."
+sed -i.bak "s|^SCANBD_DEVICE=.*$|SCANBD_DEVICE=\"${SANE_DEVICE}\"|" /etc/scanbd/addon.conf
+rm -f /etc/scanbd/addon.conf.bak
 exec python3 /usr/local/bin/button_daemon.py
