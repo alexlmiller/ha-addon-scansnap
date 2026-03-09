@@ -16,6 +16,31 @@ log() {
     echo "[scan.sh $(date +%H:%M:%S)] $*"
 }
 
+run_scanimage() {
+    local device_arg="$1"
+
+    if [ -n "${device_arg}" ]; then
+        log "Trying scanimage with device: ${device_arg}"
+        scanimage \
+            -d "${device_arg}" \
+            --source "${SCAN_SOURCE}" \
+            --mode "${SCAN_COLOR:-Color}" \
+            --resolution "${SCAN_RESOLUTION:-300}" \
+            --format=tiff \
+            --batch="${WORKDIR}/page_%04d.tiff" \
+            --batch-start=1
+    else
+        log "Trying scanimage with default device selection"
+        scanimage \
+            --source "${SCAN_SOURCE}" \
+            --mode "${SCAN_COLOR:-Color}" \
+            --resolution "${SCAN_RESOLUTION:-300}" \
+            --format=tiff \
+            --batch="${WORKDIR}/page_%04d.tiff" \
+            --batch-start=1
+    fi
+}
+
 notify_ha() {
     local title="$1"
     local message="$2"
@@ -43,15 +68,21 @@ fi
 
 log "Scanning with device: ${SCANBD_DEVICE:-fujitsu} | source: ${SCAN_SOURCE} | mode: ${SCAN_COLOR:-Color} | ${SCAN_RESOLUTION:-300} dpi..."
 
-scanimage \
-    -d "${SCANBD_DEVICE}" \
-    --source "${SCAN_SOURCE}" \
-    --mode "${SCAN_COLOR:-Color}" \
-    --resolution "${SCAN_RESOLUTION:-300}" \
-    --format=tiff \
-    --batch="${WORKDIR}/page_%04d.tiff" \
-    --batch-start=1 \
-    || true  # Non-zero exit when ADF empties is expected behavior
+log "SANE devices visible at scan time:"
+scanimage -L 2>&1 | while IFS= read -r line; do
+    log "  ${line}"
+done || true
+
+SCAN_EXIT=0
+if ! run_scanimage "${SCANBD_DEVICE:-}"; then
+    SCAN_EXIT=$?
+    log "scanimage failed with configured device (${SCAN_EXIT}); retrying with default device selection"
+    rm -f "${WORKDIR}"/page_*.tiff
+    if ! run_scanimage ""; then
+        SCAN_EXIT=$?
+        fail "scanimage failed to open the scanner (last exit ${SCAN_EXIT})"
+    fi
+fi
 
 PAGE_COUNT=$(ls "${WORKDIR}"/page_*.tiff 2>/dev/null | wc -l)
 if [ "${PAGE_COUNT}" -eq 0 ]; then
