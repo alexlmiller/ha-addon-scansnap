@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"scansnap_buttond/internal/fss500"
@@ -13,27 +12,16 @@ import (
 	"scansnap_buttond/internal/usb"
 )
 
-func scanGeometryFromEnv() fss500.ScanGeometry {
-	resolution := 300
-	if raw := os.Getenv("SCAN_RESOLUTION"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil && (parsed == 150 || parsed == 300 || parsed == 600) {
-			resolution = parsed
-		}
-	}
-
-	return fss500.ScanGeometry{
-		Resolution: resolution,
-		WidthPx:    resolution * 827 / 100,
-		HeightPx:   resolution * 1169 / 100,
-	}
-}
-
 func ScanToDir(dev *usb.Device, dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
-	geometry := scanGeometryFromEnv()
+	geometry := fss500.ScanGeometry{
+		Resolution: 600,
+		WidthPx:    4960,
+		HeightPx:   7016,
+	}
 
 	if err := fss500.Inquire(dev); err != nil {
 		return err

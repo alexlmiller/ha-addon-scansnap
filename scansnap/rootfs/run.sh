@@ -42,7 +42,7 @@ bashio::log.info "Nextcloud URL: ${NEXTCLOUD_URL}"
 bashio::log.info "OCR language: ${OCR_LANGUAGE}"
 bashio::log.info "Storage backend: ${STORAGE_BACKEND}"
 bashio::log.info "Configured scan mode: ${SCAN_RESOLUTION} dpi | color: ${SCAN_COLOR} | duplex: ${SCAN_DUPLEX}"
-bashio::log.warning "USB-native scanning honors configured resolution, but color/duplex controls are not fully wired yet"
+bashio::log.warning "USB-native scanning currently uses fixed duplex/color/600dpi behavior while the low-level protocol is stabilized"
 
 # Wait for USB to settle after container start
 bashio::log.info "Waiting for USB devices to settle..."

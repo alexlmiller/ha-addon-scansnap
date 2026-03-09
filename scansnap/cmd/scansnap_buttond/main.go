@@ -21,7 +21,7 @@ const (
 func main() {
 	log.Printf("Starting ScanSnap iX500 single-owner daemon")
 	log.Printf("Button press starts scan -> OCR -> upload pipeline")
-	log.Printf("USB-native scan path currently honors configured resolution, but still uses fixed duplex/color behavior")
+	log.Printf("USB-native scan path currently uses fixed duplex/color/600dpi behavior")
 
 	var lastScan time.Time
 	for {
