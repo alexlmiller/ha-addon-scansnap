@@ -20,8 +20,10 @@ if bashio::var.is_empty "${NEXTCLOUD_SHARE_TOKEN}"; then
     bashio::exit.nok "nextcloud_share_token is required"
 fi
 
-# Write config file for scan.sh (scanbd subprocess cannot use bashio)
-# Include SUPERVISOR_TOKEN so scan.sh can call the HA API
+# Write config file for scan.sh (subprocess cannot use bashio)
+# SCANBD_DEVICE is set to "fujitsu" as a fixed default for the iX500.
+# The button_daemon releases USB before calling scan.sh, so SANE
+# can open the device.
 mkdir -p /etc/scanbd
 cat > /etc/scanbd/addon.conf <<EOF
 NEXTCLOUD_URL="${NEXTCLOUD_URL}"
@@ -30,6 +32,7 @@ NEXTCLOUD_SHARE_PASSWORD="${NEXTCLOUD_SHARE_PASSWORD}"
 SCAN_RESOLUTION="${SCAN_RESOLUTION}"
 OCR_LANGUAGE="${OCR_LANGUAGE}"
 SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN}"
+SCANBD_DEVICE="fujitsu"
 EOF
 chmod 600 /etc/scanbd/addon.conf
 
@@ -41,25 +44,13 @@ bashio::log.info "Scan resolution: ${SCAN_RESOLUTION} dpi"
 bashio::log.info "Waiting for USB devices to settle..."
 sleep 3
 
-# Log detected SANE devices
+# Log detected SANE devices (informational only — button detection is via USB bulk transfer)
 bashio::log.info "Detected SANE devices:"
 scanimage -L 2>&1 | while IFS= read -r line; do
     bashio::log.info "  ${line}"
 done || true
 
-# Log all scanner options so we can verify the button option name
-# Device name format from scanimage -L: device `name' is a ...
-bashio::log.info "Scanner options (for button filter debugging):"
-DEVICE=$(scanimage -L 2>/dev/null | sed -n "s/^device \`\([^']*\)'.*/\1/p" | head -1)
-if [[ -n "${DEVICE}" ]]; then
-    bashio::log.info "  Device: ${DEVICE}"
-    timeout 15 scanimage -d "${DEVICE}" --all-options 2>&1 | head -80 | while IFS= read -r line; do
-        bashio::log.info "  ${line}"
-    done || true
-else
-    bashio::log.info "  Could not determine device name"
-fi
-
-# Start scanbd in foreground; it polls the scanner button and calls scan.sh
-bashio::log.info "Starting scanbd button daemon..."
-exec /usr/sbin/scanbd -f -c /etc/scanbd/scanbd.conf
+# Start the USB button daemon (polls for physical button press via GET_HW_STATUS,
+# also serves the HA ingress panel "Scan Now" button on HTTP_PORT)
+bashio::log.info "Starting ScanSnap button daemon..."
+exec python3 /usr/local/bin/button_daemon.py

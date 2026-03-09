@@ -1,6 +1,6 @@
 name: "ScanSnap iX500"
 description: "One-button duplex OCR scanning to Nextcloud via File Drop"
-version: "1.0.7"
+version: "1.1.0"
 slug: "scansnap_ix500"
 init: false
 arch:
@@ -11,6 +11,12 @@ homeassistant_api: true
 # full_access gives the container access to all host devices (needed for USB
 # scanner whose /dev/bus/usb/XXX/YYY path can change between reboots)
 full_access: true
+
+# Ingress panel — embedded "Scan Now" page in the HA sidebar
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:scanner
+panel_title: Scanner
 
 options:
   nextcloud_url: ""
