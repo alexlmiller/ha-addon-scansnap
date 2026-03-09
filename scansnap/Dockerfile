@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr-eng \
     # OCR pipeline
     ocrmypdf \
+    jbig2enc \
     unpaper \
     pngquant \
     # Lossless TIFF→PDF assembly
