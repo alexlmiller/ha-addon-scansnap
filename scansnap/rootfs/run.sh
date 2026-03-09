@@ -5,6 +5,8 @@ NEXTCLOUD_URL=$(bashio::config 'nextcloud_url')
 NEXTCLOUD_SHARE_TOKEN=$(bashio::config 'nextcloud_share_token')
 SCAN_RESOLUTION=$(bashio::config 'scan_resolution')
 OCR_LANGUAGE=$(bashio::config 'ocr_language')
+SCAN_DUPLEX=$(bashio::config 'scan_duplex')
+SCAN_COLOR=$(bashio::config 'scan_color')
 
 if bashio::config.has_value 'nextcloud_share_password'; then
     NEXTCLOUD_SHARE_PASSWORD=$(bashio::config 'nextcloud_share_password')
@@ -31,6 +33,8 @@ NEXTCLOUD_SHARE_TOKEN="${NEXTCLOUD_SHARE_TOKEN}"
 NEXTCLOUD_SHARE_PASSWORD="${NEXTCLOUD_SHARE_PASSWORD}"
 SCAN_RESOLUTION="${SCAN_RESOLUTION}"
 OCR_LANGUAGE="${OCR_LANGUAGE}"
+SCAN_DUPLEX="${SCAN_DUPLEX}"
+SCAN_COLOR="${SCAN_COLOR}"
 SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN}"
 SCANBD_DEVICE="fujitsu"
 EOF
@@ -38,7 +42,7 @@ chmod 600 /etc/scanbd/addon.conf
 
 bashio::log.info "Nextcloud URL: ${NEXTCLOUD_URL}"
 bashio::log.info "OCR language: ${OCR_LANGUAGE}"
-bashio::log.info "Scan resolution: ${SCAN_RESOLUTION} dpi"
+bashio::log.info "Scan resolution: ${SCAN_RESOLUTION} dpi | color: ${SCAN_COLOR} | duplex: ${SCAN_DUPLEX}"
 
 # Wait for USB to settle after container start
 bashio::log.info "Waiting for USB devices to settle..."

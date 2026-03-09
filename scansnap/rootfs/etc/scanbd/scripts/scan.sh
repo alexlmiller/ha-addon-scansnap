@@ -34,14 +34,19 @@ fail() {
 }
 
 # ── Step 1: Scan ─────────────────────────────────────────────────────────────
-# scanbd suspends its own polling before calling this script, so the device is
-# available. $SCANBD_DEVICE is set by scanbd to the matching SANE device string.
-log "Scanning with device: ${SCANBD_DEVICE:-fujitsu} at ${SCAN_RESOLUTION:-300} dpi..."
+# button_daemon releases USB before calling this script, so the device is
+# available. SCANBD_DEVICE is written to addon.conf by run.sh.
+SCAN_SOURCE="ADF Duplex"
+if [ "${SCAN_DUPLEX:-true}" = "false" ]; then
+    SCAN_SOURCE="ADF Front"
+fi
+
+log "Scanning with device: ${SCANBD_DEVICE:-fujitsu} | source: ${SCAN_SOURCE} | mode: ${SCAN_COLOR:-Color} | ${SCAN_RESOLUTION:-300} dpi..."
 
 scanimage \
     -d "${SCANBD_DEVICE}" \
-    --source "ADF Duplex" \
-    --mode Color \
+    --source "${SCAN_SOURCE}" \
+    --mode "${SCAN_COLOR:-Color}" \
     --resolution "${SCAN_RESOLUTION:-300}" \
     --format=tiff \
     --batch="${WORKDIR}/page_%04d.tiff" \
