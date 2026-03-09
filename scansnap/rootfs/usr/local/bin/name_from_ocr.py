@@ -63,6 +63,42 @@ ORG_SUFFIX_RE = re.compile(
     re.IGNORECASE,
 )
 
+GOVERNMENT_RE = re.compile(
+    r"\b("
+    r"Department|Court|County|State|City|Town|Agency|Office|Commission|"
+    r"Administration|Revenue|Treasury|Water|District|Authority|Board"
+    r")\b",
+    re.IGNORECASE,
+)
+
+NOISE_RE = re.compile(
+    r"\b("
+    r"letter date|letter id|dear |dated this|page \d+|geocode|contact information|"
+    r"governor|director|telephone|zoom|www\.|http|https"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def clean_org_candidate(line: str) -> str:
+    line = re.sub(r"[^\w\s&.,'\-]", "", line)
+    line = re.sub(r"\s+", " ", line).strip(" -,:")
+    return line[:60].strip()
+
+
+def looks_like_garbage_org(line: str) -> bool:
+    compact = re.sub(r"[^A-Za-z]", "", line)
+    if len(compact) < 4:
+        return True
+    if len(compact) >= 7 and compact.isupper() and " " not in line:
+        return True
+    vowels = sum(1 for c in compact.lower() if c in "aeiou")
+    if vowels == 0:
+        return True
+    if len(compact) >= 6 and vowels / len(compact) < 0.18:
+        return True
+    return False
+
 
 def extract_org(lines: list[str]) -> str | None:
     """Scan first 15 lines for a likely organization name."""
@@ -70,12 +106,20 @@ def extract_org(lines: list[str]) -> str | None:
         line = line.strip()
         if not line or len(line) > 60:
             continue
+        if NOISE_RE.search(line):
+            continue
 
         # Line contains a recognized org suffix (LLC, Bank, Inc, etc.)
         if ORG_SUFFIX_RE.search(line):
             # Strip noise, keep first ~40 chars
-            org = re.sub(r"[^\w\s&.,'\-]", "", line)[:40].strip()
+            org = clean_org_candidate(line)
             if org:
+                return org
+
+        # Government / agency letterheads in title case or uppercase
+        if GOVERNMENT_RE.search(line) and len(line.split()) <= 6:
+            org = clean_org_candidate(line)
+            if org and not looks_like_garbage_org(org):
                 return org
 
         # Short ALL-CAPS line = letterhead (e.g. "AT&T", "CHASE BANK")
@@ -85,7 +129,9 @@ def extract_org(lines: list[str]) -> str | None:
             and 1 <= len(words) <= 5
             and 3 < len(line) < 40
         ):
-            return line.strip()
+            org = clean_org_candidate(line)
+            if org and not looks_like_garbage_org(org):
+                return org
 
     return None
 
@@ -97,6 +143,7 @@ DOC_TYPES = [
     (r"\bstatement\b", "Statement"),
     (r"\breceipt\b", "Receipt"),
     (r"\bbill\b", "Bill"),
+    (r"\bletter\b", "Letter"),
     (r"\bexplanation of benefits\b", "Explanation of Benefits"),
     (r"\beob\b", "Explanation of Benefits"),
     (r"\binsurance\b", "Insurance"),
@@ -108,6 +155,8 @@ DOC_TYPES = [
     (r"\bform\b", "Form"),
     (r"\bagreement\b", "Agreement"),
     (r"\bcontract\b", "Contract"),
+    (r"\bwater court\b", "Notice"),
+    (r"\bdepartment of revenue\b", "Notice"),
 ]
 
 
@@ -116,6 +165,8 @@ def extract_type(text: str) -> str | None:
     for pattern, label in DOC_TYPES:
         if re.search(pattern, text_lower):
             return label
+    if "dear " in text_lower:
+        return "Letter"
     return None
 
 
