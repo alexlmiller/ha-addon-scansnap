@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     # Python scripts for scan processing
     python3 \
+    python3-opencv \
     python3-pillow \
     && (apt-get install -y --no-install-recommends jbig2enc || true) \
     && rm -rf /var/lib/apt/lists/*
