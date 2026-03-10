@@ -7,6 +7,7 @@ echo "[scan.sh] Processing scanned pages from: ${SCANNED_DIR:-unknown}" >&2
 # Load configuration written by run.sh (bashio context not available here)
 ADDON_CONF_PATH="${ADDON_CONF_PATH:-/etc/scanbd/addon.conf}"
 source "${ADDON_CONF_PATH}" || { echo "[scan.sh] ERROR: failed to source ${ADDON_CONF_PATH}" >&2; exit 1; }
+SCRIPT_BIN_DIR="${SCRIPT_BIN_DIR:-/usr/local/bin}"
 
 WORKDIR="${SCANNED_DIR:-}"
 if [ -z "${WORKDIR}" ] || [ ! -d "${WORKDIR}" ]; then
@@ -194,13 +195,13 @@ archive_raw_scan
 
 # ── Step 2: Normalize page orientation ───────────────────────────────────────
 log "Rotating pages to upright orientation..."
-/usr/local/bin/rotate_pages.py "${PAGE_FILES[@]}"
+"${SCRIPT_BIN_DIR}/rotate_pages.py" "${PAGE_FILES[@]}"
 
 # ── Step 3: Remove blank pages ───────────────────────────────────────────────
 # Pillow-based: deletes image files where >97% of pixels are near-white.
 # Strips blank duplex reverses from single-sided originals.
 log "Checking for blank pages..."
-/usr/local/bin/remove_blank_pages.py "${PAGE_FILES[@]}"
+"${SCRIPT_BIN_DIR}/remove_blank_pages.py" "${PAGE_FILES[@]}"
 
 PAGE_FILES=("${WORKDIR}"/page_*.jpg "${WORKDIR}"/page_*.jpeg "${WORKDIR}"/page_*.tiff)
 KEPT_COUNT=${#PAGE_FILES[@]}
@@ -216,9 +217,9 @@ case "${PROCESSING_PROFILE}" in
     baseline)
         log "Using baseline page processing (no extra image cleanup)"
         ;;
-    gray_light|gray_soft|gray_bg_flatten)
+    document_clean|document_texture|gray_light|gray_soft|gray_denoise|gray_denoise_text|gray_denoise_text_strong|gray_text_boost|gray_light_text|gray_light_denoise_text|gray_bg_soft|gray_bg_soft_text|gray_bg_flatten|restore_gray|restore_soft_bw|restore_soft_bw_cleaner|restore_clean_bw|restore_text_mask|restore_text_mask_soft)
         log "Cleaning page backgrounds with profile: ${PROCESSING_PROFILE}"
-        /usr/local/bin/clean_document_pages.py "${PROCESSING_PROFILE}" "${PAGE_FILES[@]}" \
+        "${SCRIPT_BIN_DIR}/clean_document_pages.py" "${PROCESSING_PROFILE}" "${PAGE_FILES[@]}" \
             || fail "document page cleanup failed"
         ;;
     *)
@@ -248,7 +249,7 @@ log "Extracting text for filename..."
 
 # Extract first 3000 chars from OCR'd PDF for analysis
 TEXT=$(pdftotext "${OCR_PDF}" - 2>/dev/null | head -c 3000 || true)
-FILENAME=$(echo "${TEXT}" | /usr/local/bin/name_from_ocr.py)
+FILENAME=$(echo "${TEXT}" | "${SCRIPT_BIN_DIR}/name_from_ocr.py")
 log "Filename: ${FILENAME}"
 
 # ── Step 8: Upload to configured destination ─────────────────────────────────

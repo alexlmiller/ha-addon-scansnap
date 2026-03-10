@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [ "$#" -lt 2 ]; then
     echo "Usage: $0 <raw_scan_dir> <output_dir> [profile ...]" >&2
-    echo "Example: $0 /share/scansnap-raw/20260310-101500-scan-abcd /tmp/replay baseline gray_light" >&2
+    echo "Example: $0 /share/scansnap-raw/20260310-101500-scan-abcd /tmp/replay document_clean document_texture" >&2
     exit 1
 fi
 
@@ -17,12 +17,17 @@ if [ ! -d "${RAW_SCAN_DIR}" ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-    set -- baseline gray_light gray_soft gray_bg_flatten
+    set -- document_clean document_texture baseline
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCAN_SCRIPT="${ROOT_DIR}/scansnap/rootfs/etc/scanbd/scripts/scan.sh"
+SCRIPT_BIN_DIR="${ROOT_DIR}/scansnap/rootfs/usr/local/bin"
+BASH_BIN="$(command -v bash)"
+if [ -x /opt/homebrew/bin/bash ]; then
+    BASH_BIN="/opt/homebrew/bin/bash"
+fi
 
 mkdir -p "${OUTPUT_DIR}"
 
@@ -52,8 +57,9 @@ EOF
     SCANNED_DIR="${workdir}" \
     LOCAL_OUTPUT_DIR="${outfile_dir}" \
     ADDON_CONF_PATH="${addon_conf}" \
+    SCRIPT_BIN_DIR="${SCRIPT_BIN_DIR}" \
     PROCESSING_PROFILE="${profile}" \
-    "${SCAN_SCRIPT}"
+    "${BASH_BIN}" "${SCAN_SCRIPT}"
 
     rm -f "${addon_conf}"
 done

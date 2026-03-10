@@ -43,7 +43,7 @@ This add-on uses Nextcloud's **File Drop** feature — an upload-only share that
 | Option | Default | Description |
 |--------|---------|-------------|
 | `scan_profile` | `stable_300` | Low-level USB scan profile. `stable_300` is the normal default and `stable_600` is a fallback. |
-| `processing_profile` | `baseline` | Post-scan image cleanup profile for structured comparison. `baseline` keeps the original image path, while `gray_light`, `gray_soft`, and `gray_bg_flatten` apply progressively stronger cleanup. |
+| `processing_profile` | `document_clean` | Post-scan page rendering profile. `document_clean` is the default for readable, analysis-friendly document output. `document_texture` preserves more of the original paper character. |
 | `archive_raw_scans` | `false` | If enabled, saves each raw `page_XXXX.jpg` scan set before any rotation, blank-page removal, or OCR. |
 | `raw_scan_archive_dir` | `/share/scansnap-raw` | Where raw scan directories are archived when `archive_raw_scans` is enabled. This path is inside Home Assistant's shared folder. |
 | `ocr_language` | `eng` | Tesseract language code(s) — e.g. `eng`, `fra`, `eng+fra` |
@@ -52,7 +52,7 @@ This add-on uses Nextcloud's **File Drop** feature — an upload-only share that
 
 Current limitation: the single-owner USB scanner path is stable, but the low-level duplex/color controls are still not fully mapped to the Home Assistant options.
 `scan_profile` is the scanner-mode control that matters today; `scan_duplex` and `scan_color` remain reserved until the USB-native path is mapped more fully.
-`processing_profile` is where image cleanup experiments should happen.
+`processing_profile` selects between the two settled document-rendering modes; deeper local experimentation is documented in [SCAN_FORMATS.md](/Users/alex/code/ha-addon-scansnap/scansnap/SCAN_FORMATS.md).
 
 ## How It Works
 
@@ -76,10 +76,10 @@ To avoid rescanning the same document while tuning post-processing:
 ./scripts/replay_raw_scan.sh \
   /path/to/raw-scan-dir \
   /tmp/scansnap-replay \
-  baseline gray_light gray_soft gray_bg_flatten
+  document_clean document_texture baseline
 ```
 
-This re-runs the processing pipeline against a copy of the raw `page_XXXX.jpg` files for each requested `processing_profile` and writes the resulting PDFs to per-profile directories under the chosen output directory. The replay path uses a local-only backend, so it does not upload anything.
+This re-runs the processing pipeline against a copy of the raw `page_XXXX.jpg` files for each requested `processing_profile` and writes the resulting PDFs to per-profile directories under the chosen output directory. The replay path uses a local-only backend, so it does not upload anything. Additional experimental/internal profiles are described in [SCAN_FORMATS.md](/Users/alex/code/ha-addon-scansnap/scansnap/SCAN_FORMATS.md).
 
 The default archive directory `/share/scansnap-raw` corresponds to Home Assistant's shared folder, so archived raw scans should be accessible from the host after a scan completes.
 
