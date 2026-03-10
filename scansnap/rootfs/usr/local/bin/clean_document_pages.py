@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""
-Apply conservative document cleanup to scanned image pages in-place.
-
-This targets paper texture and bleed-through while preserving dark text.
-It intentionally avoids aggressive binarization so the result remains
-readable as an archival scan and suitable for OCR/LLM processing.
-"""
+"""Apply selected document cleanup profiles to scanned image pages in-place."""
 
 import sys
 from PIL import Image, ImageFilter, ImageOps
@@ -25,24 +19,37 @@ def flatten_background(gray: Image.Image) -> Image.Image:
     return Image.composite(gray, background, text_mask)
 
 
-def clean_page(path: str) -> None:
+def clean_page(path: str, mode: str) -> None:
     with Image.open(path) as img:
+        if mode == "baseline":
+            return
+
         gray = img.convert("L")
         cleaned = ImageOps.autocontrast(gray, cutoff=CONTRAST_CUTOFF)
-        cleaned = flatten_background(cleaned)
-        cleaned = cleaned.filter(ImageFilter.MedianFilter(size=3))
+
+        if mode == "gray_light":
+            pass
+        elif mode == "gray_soft":
+            cleaned = cleaned.filter(ImageFilter.MedianFilter(size=3))
+        elif mode == "gray_bg_flatten":
+            cleaned = flatten_background(cleaned)
+            cleaned = cleaned.filter(ImageFilter.MedianFilter(size=3))
+        else:
+            raise ValueError(f"unknown cleanup mode: {mode}")
+
         cleaned.save(path, format="JPEG", quality=JPEG_QUALITY, optimize=True)
 
 
 def main() -> int:
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <image> [image ...]", file=sys.stderr)
+    if len(sys.argv) < 3:
+        print(f"Usage: {sys.argv[0]} <mode> <image> [image ...]", file=sys.stderr)
         return 1
 
-    for path in sys.argv[1:]:
+    mode = sys.argv[1]
+    for path in sys.argv[2:]:
         try:
-            clean_page(path)
-            print(f"CLEAN:            {path}", file=sys.stderr)
+            clean_page(path, mode)
+            print(f"CLEAN ({mode}):   {path}", file=sys.stderr)
         except Exception as exc:
             print(f"ERROR cleaning {path}: {exc}", file=sys.stderr)
             return 1

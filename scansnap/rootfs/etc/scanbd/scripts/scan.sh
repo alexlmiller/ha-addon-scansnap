@@ -19,6 +19,16 @@ log() {
     echo "[scan.sh $(date +%H:%M:%S)] $*"
 }
 
+ocr_args() {
+    printf '%s\n' \
+        --rotate-pages \
+        --deskew \
+        --clean-final \
+        -O 2 \
+        --output-type pdfa \
+        -l "${OCR_LANGUAGE:-eng}"
+}
+
 fail() {
     log "ERROR: $1"
     exit 1
@@ -172,10 +182,22 @@ if [ "${KEPT_COUNT}" -eq 0 ]; then
 fi
 log "Kept ${KEPT_COUNT} page(s) after blank removal"
 
-# ── Step 4: Clean page backgrounds for OCR/readability ───────────────────────
-log "Cleaning page backgrounds..."
-/usr/local/bin/clean_document_pages.py "${PAGE_FILES[@]}" \
-    || fail "document page cleanup failed"
+# ── Step 4: Apply processing profile ─────────────────────────────────────────
+PROCESSING_PROFILE="${PROCESSING_PROFILE:-baseline}"
+log "Processing profile: ${PROCESSING_PROFILE}"
+case "${PROCESSING_PROFILE}" in
+    baseline)
+        log "Using baseline page processing (no extra image cleanup)"
+        ;;
+    gray_light|gray_soft|gray_bg_flatten)
+        log "Cleaning page backgrounds with profile: ${PROCESSING_PROFILE}"
+        /usr/local/bin/clean_document_pages.py "${PROCESSING_PROFILE}" "${PAGE_FILES[@]}" \
+            || fail "document page cleanup failed"
+        ;;
+    *)
+        fail "Unsupported processing profile: ${PROCESSING_PROFILE}"
+        ;;
+esac
 
 # ── Step 5: Assemble lossless PDF ────────────────────────────────────────────
 RAW_PDF="${WORKDIR}/raw.pdf"
@@ -188,13 +210,9 @@ img2pdf --output "${RAW_PDF}" "${PAGE_FILES[@]}" \
 OCR_PDF="${WORKDIR}/ocr.pdf"
 log "Running OCR (language: ${OCR_LANGUAGE:-eng})..."
 
+mapfile -t OCR_ARGS < <(ocr_args)
 ocrmypdf \
-    --rotate-pages \
-    --deskew \
-    --clean-final \
-    -O 2 \
-    --output-type pdfa \
-    -l "${OCR_LANGUAGE:-eng}" \
+    "${OCR_ARGS[@]}" \
     "${RAW_PDF}" "${OCR_PDF}" \
     || fail "ocrmypdf failed"
 

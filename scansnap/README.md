@@ -43,12 +43,14 @@ This add-on uses Nextcloud's **File Drop** feature — an upload-only share that
 | Option | Default | Description |
 |--------|---------|-------------|
 | `scan_profile` | `stable_300` | Low-level USB scan profile. `stable_300` is the normal default and `stable_600` is a fallback. |
+| `processing_profile` | `baseline` | Post-scan image cleanup profile for structured comparison. `baseline` keeps the original image path, while `gray_light`, `gray_soft`, and `gray_bg_flatten` apply progressively stronger cleanup. |
 | `ocr_language` | `eng` | Tesseract language code(s) — e.g. `eng`, `fra`, `eng+fra` |
 | `scan_duplex` | `true` | Scan both sides of each page (ADF Duplex). Blank reverses are removed automatically. |
 | `scan_color` | `Color` | Color mode: `Color`, `Gray`, or `Lineart` |
 
 Current limitation: the single-owner USB scanner path is stable, but the low-level duplex/color controls are still not fully mapped to the Home Assistant options.
 `scan_profile` is the scanner-mode control that matters today; `scan_duplex` and `scan_color` remain reserved until the USB-native path is mapped more fully.
+`processing_profile` is where image cleanup experiments should happen.
 
 ## How It Works
 
