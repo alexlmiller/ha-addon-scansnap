@@ -1,14 +1,14 @@
 # ScanSnap iX500
 
-Press the physical scan button to scan a stack of documents from the ADF, run OCR, and upload a searchable PDF to a configured storage backend.
+Press the physical scan button to scan a stack of documents from the ADF, run OCR, and upload a searchable PDF to one or more configured destinations.
 
 ## Requirements
 
 - Fujitsu ScanSnap iX500 connected via USB
 - Home Assistant OS (amd64)
-- A supported storage backend:
-  - Nextcloud File Drop, or
-  - Seafile upload link, or
+- At least one enabled destination:
+  - Nextcloud File Drop
+  - Seafile upload link
   - Paperless-ngx
 
 ## Storage Setup
@@ -25,13 +25,13 @@ This add-on uses Nextcloud's **File Drop** feature — an upload-only share that
 
 1. Create a Seafile upload link for the target folder
 2. Copy the full upload link URL (e.g. `https://seafile.example.com/u/d/abcdef123456/`)
-3. Set `storage_backend: seafile` and paste the link into `seafile_upload_url`
+3. Set `upload_seafile: true` and paste the link into `seafile_upload_url`
 
 ### Paperless-ngx (one-time)
 
 1. Create an API token in Paperless-ngx
 2. Copy your Paperless base URL (e.g. `https://paperless.example.com`)
-3. Set `storage_backend: paperless`
+3. Set `upload_paperless: true`
 4. Paste the base URL into `paperless_url`
 5. Paste the token into `paperless_token`
 
@@ -41,7 +41,9 @@ This add-on uses Nextcloud's **File Drop** feature — an upload-only share that
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `storage_backend` | `nextcloud` | Destination backend. `nextcloud` and `seafile` are implemented. |
+| `upload_nextcloud` | `true` | Upload to Nextcloud File Drop. |
+| `upload_seafile` | `false` | Upload to Seafile using the public upload link. |
+| `upload_paperless` | `false` | Upload to Paperless-ngx using its API. |
 | `nextcloud_url` | — | Your Nextcloud base URL (e.g. `https://cloud.example.com`) |
 | `nextcloud_share_token` | — | The share token from your File Drop link |
 | `nextcloud_share_password` | _(empty)_ | Password for the share, if set |
@@ -73,7 +75,7 @@ Current limitation: the single-owner USB scanner path is stable, but the low-lev
 4. **PDF assembly** — `img2pdf` combines the remaining pages into a lossless PDF.
 5. **OCR** — `ocrmypdf` produces a searchable PDF/A with auto-rotation and deskew.
 6. **Smart filename** — The OCR text is analysed locally (no external API) to extract a document date, organisation name, and document type, producing a filename like `2026-03-07 - Chase Bank Statement.pdf`.
-7. **Destination dispatch** — The finished PDF is handed to the configured storage backend. `nextcloud`, `seafile`, and `paperless` are implemented.
+7. **Destination dispatch** — The finished PDF is handed to every enabled destination. Nextcloud, Seafile, and Paperless-ngx can be used together.
 
 ## Replaying Processing Profiles Locally
 

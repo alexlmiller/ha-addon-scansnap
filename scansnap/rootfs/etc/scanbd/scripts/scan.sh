@@ -54,20 +54,12 @@ archive_raw_scan() {
     log "Archived raw scan pages to: ${archive_path}"
 }
 
-upload_pdf() {
+upload_nextcloud() {
     local done_code
     local encoded_filename
     local http_code
-    local file_path
-    local path
-    local public_html
-    local seafile_base_url
-    local seafile_token
-    local upload_url
+    local upload_filename
     local webdav_url
-    local response_body
-    local document_title
-    local created_date
 
     nextcloud_put() {
         local url="$1"
@@ -104,109 +96,124 @@ upload_pdf() {
         esac
     }
 
-    case "${STORAGE_BACKEND:-nextcloud}" in
-        nextcloud)
-            encoded_filename=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${FILENAME}")
-            webdav_url="${NEXTCLOUD_URL}/public.php/dav/files/${NEXTCLOUD_SHARE_TOKEN}/${encoded_filename}"
-            log "Uploading to Nextcloud (modern public DAV): ${webdav_url}" >&2
-            http_code=$(nextcloud_put "${webdav_url}" modern)
+    upload_filename="${FILENAME}"
+    encoded_filename=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${upload_filename}")
+    webdav_url="${NEXTCLOUD_URL}/public.php/dav/files/${NEXTCLOUD_SHARE_TOKEN}/${encoded_filename}"
+    log "Uploading to Nextcloud (modern public DAV): ${webdav_url}" >&2
+    http_code=$(nextcloud_put "${webdav_url}" modern)
 
-            if [ "${http_code}" = "404" ] || [ "${http_code}" = "405" ] || [ "${http_code}" = "501" ]; then
-                webdav_url="${NEXTCLOUD_URL}/public.php/webdav/${encoded_filename}"
-                log "Falling back to legacy public WebDAV endpoint: ${webdav_url}" >&2
-                http_code=$(nextcloud_put "${webdav_url}" legacy)
-            fi
+    if [ "${http_code}" = "404" ] || [ "${http_code}" = "405" ] || [ "${http_code}" = "501" ]; then
+        webdav_url="${NEXTCLOUD_URL}/public.php/webdav/${encoded_filename}"
+        log "Falling back to legacy public WebDAV endpoint: ${webdav_url}" >&2
+        http_code=$(nextcloud_put "${webdav_url}" legacy)
+    fi
 
-            if [ "${http_code}" = "409" ]; then
-                FILENAME="${FILENAME%.pdf} ($(date +%H%M%S)).pdf"
-                encoded_filename=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${FILENAME}")
-                webdav_url="${NEXTCLOUD_URL}/public.php/dav/files/${NEXTCLOUD_SHARE_TOKEN}/${encoded_filename}"
-                log "Retrying Nextcloud upload with unique filename: ${webdav_url}" >&2
-                http_code=$(nextcloud_put "${webdav_url}" modern)
-                if [ "${http_code}" = "404" ] || [ "${http_code}" = "405" ] || [ "${http_code}" = "501" ]; then
-                    webdav_url="${NEXTCLOUD_URL}/public.php/webdav/${encoded_filename}"
-                    log "Retrying with legacy public WebDAV endpoint: ${webdav_url}" >&2
-                    http_code=$(nextcloud_put "${webdav_url}" legacy)
-                fi
-            fi
-            printf '%s' "${http_code}"
-            ;;
-        seafile)
-            seafile_base_url=$(python3 -c 'import sys, urllib.parse; u=urllib.parse.urlparse(sys.argv[1]); print(f"{u.scheme}://{u.netloc}")' "${SEAFILE_UPLOAD_URL}")
-            seafile_token=$(python3 -c 'import re, sys, urllib.parse; path=urllib.parse.urlparse(sys.argv[1]).path; m=re.search(r"/u/d/([^/]+)/?$", path); print(m.group(1) if m else "")' "${SEAFILE_UPLOAD_URL}")
+    if [ "${http_code}" = "409" ]; then
+        upload_filename="${FILENAME%.pdf} ($(date +%H%M%S)).pdf"
+        encoded_filename=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${upload_filename}")
+        webdav_url="${NEXTCLOUD_URL}/public.php/dav/files/${NEXTCLOUD_SHARE_TOKEN}/${encoded_filename}"
+        log "Retrying Nextcloud upload with unique filename: ${webdav_url}" >&2
+        http_code=$(nextcloud_put "${webdav_url}" modern)
+        if [ "${http_code}" = "404" ] || [ "${http_code}" = "405" ] || [ "${http_code}" = "501" ]; then
+            webdav_url="${NEXTCLOUD_URL}/public.php/webdav/${encoded_filename}"
+            log "Retrying with legacy public WebDAV endpoint: ${webdav_url}" >&2
+            http_code=$(nextcloud_put "${webdav_url}" legacy)
+        fi
+    fi
+    printf '%s' "${http_code}"
+}
 
-            if [ -z "${seafile_token}" ]; then
-                fail "Could not extract Seafile upload token from seafile_upload_url"
-            fi
+upload_seafile() {
+    local done_code
+    local http_code
+    local file_path
+    local path
+    local public_html
+    local seafile_base_url
+    local seafile_token
+    local upload_url
 
-            public_html=$(curl -fsSL "${SEAFILE_UPLOAD_URL}") \
-                || fail "Failed to fetch Seafile upload page"
-            path=$(printf '%s' "${public_html}" | python3 -c 'import re, sys; html=sys.stdin.read(); m=re.search(r"path:\s*\"([^\"]+)\"", html); print(m.group(1) if m else "")')
+    seafile_base_url=$(python3 -c 'import sys, urllib.parse; u=urllib.parse.urlparse(sys.argv[1]); print(f"{u.scheme}://{u.netloc}")' "${SEAFILE_UPLOAD_URL}")
+    seafile_token=$(python3 -c 'import re, sys, urllib.parse; path=urllib.parse.urlparse(sys.argv[1]).path; m=re.search(r"/u/d/([^/]+)/?$", path); print(m.group(1) if m else "")' "${SEAFILE_UPLOAD_URL}")
 
-            if [ -z "${path}" ]; then
-                fail "Could not extract Seafile upload path from upload page"
-            fi
+    if [ -z "${seafile_token}" ]; then
+        fail "Could not extract Seafile upload token from seafile_upload_url"
+    fi
 
-            upload_url=$(curl -fsSL "${seafile_base_url}/api/v2.1/upload-links/${seafile_token}/upload/" | python3 -c 'import json, sys; data=json.load(sys.stdin); print(data.get("upload_link", ""))') \
-                || fail "Failed to fetch Seafile upload URL"
+    public_html=$(curl -fsSL "${SEAFILE_UPLOAD_URL}") \
+        || fail "Failed to fetch Seafile upload page"
+    path=$(printf '%s' "${public_html}" | python3 -c 'import re, sys; html=sys.stdin.read(); m=re.search(r"path:\s*\"([^\"]+)\"", html); print(m.group(1) if m else "")')
 
-            if [ -z "${upload_url}" ]; then
-                fail "Seafile upload API returned an empty upload URL"
-            fi
+    if [ -z "${path}" ]; then
+        fail "Could not extract Seafile upload path from upload page"
+    fi
 
-            file_path=$(python3 -c 'import posixpath, sys; print(posixpath.join(sys.argv[1], sys.argv[2]))' "${path}" "${FILENAME}")
-            log "Uploading to Seafile: ${upload_url} (parent_dir=${path})" >&2
-            http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+    upload_url=$(curl -fsSL "${seafile_base_url}/api/v2.1/upload-links/${seafile_token}/upload/" | python3 -c 'import json, sys; data=json.load(sys.stdin); print(data.get("upload_link", ""))') \
+        || fail "Failed to fetch Seafile upload URL"
+
+    if [ -z "${upload_url}" ]; then
+        fail "Seafile upload API returned an empty upload URL"
+    fi
+
+    file_path=$(python3 -c 'import posixpath, sys; print(posixpath.join(sys.argv[1], sys.argv[2]))' "${path}" "${FILENAME}")
+    log "Uploading to Seafile: ${upload_url} (parent_dir=${path})" >&2
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+        -X POST \
+        -F "file=@${OCR_PDF};type=application/pdf;filename=${FILENAME}" \
+        -F "parent_dir=${path}" \
+        "${upload_url}?ret-json=1")
+
+    if [ "${http_code}" = "200" ] || [ "${http_code}" = "201" ]; then
+        done_code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -F "file_path=${file_path}" \
+            "${seafile_base_url}/api/v2.1/share-links/${seafile_token}/upload/done/")
+        if [ "${done_code}" != "200" ] && [ "${done_code}" != "201" ] && [ "${done_code}" != "204" ]; then
+            fail "Seafile upload finalize failed (HTTP ${done_code})"
+        fi
+    fi
+
+    printf '%s' "${http_code}"
+}
+
+upload_paperless() {
+    local http_code
+    local response_body
+    local document_title
+    local created_date
+
+    document_title="${FILENAME%.pdf}"
+    created_date=""
+    if [[ "${FILENAME}" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})\ -\  ]]; then
+        created_date="${BASH_REMATCH[1]}"
+    fi
+
+    log "Uploading to Paperless-ngx: ${PAPERLESS_URL}/api/documents/post_document/" >&2
+    response_body="$(mktemp)"
+    if [ -n "${created_date}" ]; then
+        http_code=$(
+            curl -s -o "${response_body}" -w "%{http_code}" \
                 -X POST \
-                -F "file=@${OCR_PDF};type=application/pdf;filename=${FILENAME}" \
-                -F "parent_dir=${path}" \
-                "${upload_url}?ret-json=1")
+                -H "Authorization: Token ${PAPERLESS_TOKEN}" \
+                -F "document=@${OCR_PDF};type=application/pdf;filename=${FILENAME}" \
+                -F "title=${document_title}" \
+                -F "created=${created_date}" \
+                "${PAPERLESS_URL%/}/api/documents/post_document/"
+        )
+    else
+        http_code=$(
+            curl -s -o "${response_body}" -w "%{http_code}" \
+                -X POST \
+                -H "Authorization: Token ${PAPERLESS_TOKEN}" \
+                -F "document=@${OCR_PDF};type=application/pdf;filename=${FILENAME}" \
+                -F "title=${document_title}" \
+                "${PAPERLESS_URL%/}/api/documents/post_document/"
+        )
+    fi
 
-            if [ "${http_code}" = "200" ] || [ "${http_code}" = "201" ]; then
-                done_code=$(curl -s -o /dev/null -w "%{http_code}" \
-                    -X POST \
-                    -F "file_path=${file_path}" \
-                    "${seafile_base_url}/api/v2.1/share-links/${seafile_token}/upload/done/")
-                if [ "${done_code}" != "200" ] && [ "${done_code}" != "201" ] && [ "${done_code}" != "204" ]; then
-                    fail "Seafile upload finalize failed (HTTP ${done_code})"
-                fi
-            fi
-
-            printf '%s' "${http_code}"
-            ;;
-        paperless)
-            document_title="${FILENAME%.pdf}"
-            created_date=""
-            if [[ "${FILENAME}" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})\ -\  ]]; then
-                created_date="${BASH_REMATCH[1]}"
-            fi
-
-            log "Uploading to Paperless-ngx: ${PAPERLESS_URL}/api/documents/post_document/" >&2
-            response_body="$(mktemp)"
-            if [ -n "${created_date}" ]; then
-                http_code=$(
-                    curl -s -o "${response_body}" -w "%{http_code}" \
-                        -X POST \
-                        -H "Authorization: Token ${PAPERLESS_TOKEN}" \
-                        -F "document=@${OCR_PDF};type=application/pdf;filename=${FILENAME}" \
-                        -F "title=${document_title}" \
-                        -F "created=${created_date}" \
-                        "${PAPERLESS_URL%/}/api/documents/post_document/"
-                )
-            else
-                http_code=$(
-                    curl -s -o "${response_body}" -w "%{http_code}" \
-                        -X POST \
-                        -H "Authorization: Token ${PAPERLESS_TOKEN}" \
-                        -F "document=@${OCR_PDF};type=application/pdf;filename=${FILENAME}" \
-                        -F "title=${document_title}" \
-                        "${PAPERLESS_URL%/}/api/documents/post_document/"
-                )
-            fi
-
-            if [ "${http_code}" = "200" ] || [ "${http_code}" = "201" ] || [ "${http_code}" = "202" ]; then
-                local task_id
-                task_id="$(python3 -c 'import json,sys
+    if [ "${http_code}" = "200" ] || [ "${http_code}" = "201" ] || [ "${http_code}" = "202" ]; then
+        local task_id
+        task_id="$(python3 -c 'import json,sys
 from pathlib import Path
 raw=Path(sys.argv[1]).read_text().strip()
 if not raw:
@@ -223,26 +230,69 @@ elif isinstance(data, dict):
     print(data.get("task_id") or data.get("task") or data.get("id") or "")
 else:
     print("")' "${response_body}")"
-                if [ -n "${task_id}" ]; then
-                    log "Paperless accepted document (task: ${task_id})" >&2
-                else
-                    log "Paperless accepted document" >&2
-                fi
-            fi
-            rm -f "${response_body}"
-            printf '%s' "${http_code}"
-            ;;
-        local)
-            mkdir -p "${LOCAL_OUTPUT_DIR:?LOCAL_OUTPUT_DIR is required for local backend}" \
-                || fail "Could not create local output dir"
-            cp "${OCR_PDF}" "${LOCAL_OUTPUT_DIR}/${FILENAME}" \
-                || fail "Could not write local output PDF"
-            printf '%s' "201"
-            ;;
-        *)
-            fail "Unsupported storage backend: ${STORAGE_BACKEND}"
-            ;;
-    esac
+        if [ -n "${task_id}" ]; then
+            log "Paperless accepted document (task: ${task_id})" >&2
+        else
+            log "Paperless accepted document" >&2
+        fi
+    fi
+    rm -f "${response_body}"
+    printf '%s' "${http_code}"
+}
+
+upload_local() {
+    mkdir -p "${LOCAL_OUTPUT_DIR:?LOCAL_OUTPUT_DIR is required for local backend}" \
+        || fail "Could not create local output dir"
+    cp "${OCR_PDF}" "${LOCAL_OUTPUT_DIR}/${FILENAME}" \
+        || fail "Could not write local output PDF"
+    printf '%s' "201"
+}
+
+upload_pdf() {
+    local status
+    local failures=0
+
+    if [ "${UPLOAD_NEXTCLOUD:-false}" = "true" ]; then
+        status="$(upload_nextcloud)"
+        if [ "${status}" != "200" ] && [ "${status}" != "201" ] && [ "${status}" != "204" ]; then
+            log "ERROR: Nextcloud upload failed (HTTP ${status})"
+            failures=1
+        else
+            log "Nextcloud upload successful (HTTP ${status})"
+        fi
+    fi
+
+    if [ "${UPLOAD_SEAFILE:-false}" = "true" ]; then
+        status="$(upload_seafile)"
+        if [ "${status}" != "200" ] && [ "${status}" != "201" ] && [ "${status}" != "204" ]; then
+            log "ERROR: Seafile upload failed (HTTP ${status})"
+            failures=1
+        else
+            log "Seafile upload successful (HTTP ${status})"
+        fi
+    fi
+
+    if [ "${UPLOAD_PAPERLESS:-false}" = "true" ]; then
+        status="$(upload_paperless)"
+        if [ "${status}" != "200" ] && [ "${status}" != "201" ] && [ "${status}" != "202" ] && [ "${status}" != "204" ]; then
+            log "ERROR: Paperless upload failed (HTTP ${status})"
+            failures=1
+        else
+            log "Paperless upload successful (HTTP ${status})"
+        fi
+    fi
+
+    if [ "${STORAGE_BACKEND:-}" = "local" ]; then
+        status="$(upload_local)"
+        if [ "${status}" != "201" ]; then
+            log "ERROR: Local output failed (HTTP ${status})"
+            failures=1
+        else
+            log "Local output successful (HTTP ${status})"
+        fi
+    fi
+
+    return "${failures}"
 }
 
 # ── Step 1: Validate scanned page output ─────────────────────────────────────
@@ -314,12 +364,9 @@ FILENAME=$(echo "${TEXT}" | "${SCRIPT_BIN_DIR}/name_from_ocr.py")
 log "Filename: ${FILENAME}"
 
 # ── Step 8: Upload to configured destination ─────────────────────────────────
-HTTP_CODE=$(upload_pdf)
-
-if [ "${HTTP_CODE}" != "200" ] && [ "${HTTP_CODE}" != "201" ] && [ "${HTTP_CODE}" != "204" ]; then
-    fail "Upload failed (HTTP ${HTTP_CODE}) — check destination configuration"
+if ! upload_pdf; then
+    fail "One or more uploads failed — check destination configuration"
 fi
 
 # ── Step 9: Success ───────────────────────────────────────────────────────────
-log "Upload successful (HTTP ${HTTP_CODE})"
 log "Done."

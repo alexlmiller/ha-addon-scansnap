@@ -1,6 +1,9 @@
 #!/usr/bin/with-contenv bashio
 
 # Read configuration options
+UPLOAD_NEXTCLOUD=$(bashio::config 'upload_nextcloud')
+UPLOAD_SEAFILE=$(bashio::config 'upload_seafile')
+UPLOAD_PAPERLESS=$(bashio::config 'upload_paperless')
 NEXTCLOUD_URL=$(bashio::config 'nextcloud_url')
 NEXTCLOUD_SHARE_TOKEN=$(bashio::config 'nextcloud_share_token')
 SEAFILE_UPLOAD_URL=$(bashio::config 'seafile_upload_url')
@@ -9,7 +12,6 @@ PAPERLESS_TOKEN=$(bashio::config 'paperless_token')
 OCR_LANGUAGE=$(bashio::config 'ocr_language')
 SCAN_DUPLEX=$(bashio::config 'scan_duplex')
 SCAN_COLOR=$(bashio::config 'scan_color')
-STORAGE_BACKEND=$(bashio::config 'storage_backend')
 SCAN_PROFILE=$(bashio::config 'scan_profile')
 PROCESSING_PROFILE=$(bashio::config 'processing_profile')
 ARCHIVE_RAW_SCANS=$(bashio::config 'archive_raw_scans')
@@ -21,33 +23,33 @@ else
     NEXTCLOUD_SHARE_PASSWORD=""
 fi
 
-# Validate required fields for the selected backend
-case "${STORAGE_BACKEND}" in
-    nextcloud)
-        if bashio::var.is_empty "${NEXTCLOUD_URL}"; then
-            bashio::exit.nok "nextcloud_url is required when storage_backend=nextcloud"
-        fi
-        if bashio::var.is_empty "${NEXTCLOUD_SHARE_TOKEN}"; then
-            bashio::exit.nok "nextcloud_share_token is required when storage_backend=nextcloud"
-        fi
-        ;;
-    seafile)
-        if bashio::var.is_empty "${SEAFILE_UPLOAD_URL}"; then
-            bashio::exit.nok "seafile_upload_url is required when storage_backend=seafile"
-        fi
-        ;;
-    paperless)
-        if bashio::var.is_empty "${PAPERLESS_URL}"; then
-            bashio::exit.nok "paperless_url is required when storage_backend=paperless"
-        fi
-        if bashio::var.is_empty "${PAPERLESS_TOKEN}"; then
-            bashio::exit.nok "paperless_token is required when storage_backend=paperless"
-        fi
-        ;;
-    *)
-        bashio::exit.nok "unsupported storage_backend: ${STORAGE_BACKEND}"
-        ;;
-esac
+if ! bashio::var.true "${UPLOAD_NEXTCLOUD}" && ! bashio::var.true "${UPLOAD_SEAFILE}" && ! bashio::var.true "${UPLOAD_PAPERLESS}"; then
+    bashio::exit.nok "Enable at least one upload destination"
+fi
+
+if bashio::var.true "${UPLOAD_NEXTCLOUD}"; then
+    if bashio::var.is_empty "${NEXTCLOUD_URL}"; then
+        bashio::exit.nok "nextcloud_url is required when upload_nextcloud=true"
+    fi
+    if bashio::var.is_empty "${NEXTCLOUD_SHARE_TOKEN}"; then
+        bashio::exit.nok "nextcloud_share_token is required when upload_nextcloud=true"
+    fi
+fi
+
+if bashio::var.true "${UPLOAD_SEAFILE}"; then
+    if bashio::var.is_empty "${SEAFILE_UPLOAD_URL}"; then
+        bashio::exit.nok "seafile_upload_url is required when upload_seafile=true"
+    fi
+fi
+
+if bashio::var.true "${UPLOAD_PAPERLESS}"; then
+    if bashio::var.is_empty "${PAPERLESS_URL}"; then
+        bashio::exit.nok "paperless_url is required when upload_paperless=true"
+    fi
+    if bashio::var.is_empty "${PAPERLESS_TOKEN}"; then
+        bashio::exit.nok "paperless_token is required when upload_paperless=true"
+    fi
+fi
 
 # Write config file for scan.sh (subprocess cannot use bashio)
 mkdir -p /etc/scanbd
@@ -58,7 +60,9 @@ NEXTCLOUD_SHARE_PASSWORD="${NEXTCLOUD_SHARE_PASSWORD}"
 SEAFILE_UPLOAD_URL="${SEAFILE_UPLOAD_URL}"
 PAPERLESS_URL="${PAPERLESS_URL}"
 PAPERLESS_TOKEN="${PAPERLESS_TOKEN}"
-STORAGE_BACKEND="${STORAGE_BACKEND}"
+UPLOAD_NEXTCLOUD="${UPLOAD_NEXTCLOUD}"
+UPLOAD_SEAFILE="${UPLOAD_SEAFILE}"
+UPLOAD_PAPERLESS="${UPLOAD_PAPERLESS}"
 SCAN_PROFILE="${SCAN_PROFILE}"
 PROCESSING_PROFILE="${PROCESSING_PROFILE}"
 ARCHIVE_RAW_SCANS="${ARCHIVE_RAW_SCANS}"
@@ -73,7 +77,7 @@ bashio::log.info "Nextcloud URL: ${NEXTCLOUD_URL}"
 bashio::log.info "Seafile upload URL: ${SEAFILE_UPLOAD_URL}"
 bashio::log.info "Paperless URL: ${PAPERLESS_URL}"
 bashio::log.info "OCR language: ${OCR_LANGUAGE}"
-bashio::log.info "Storage backend: ${STORAGE_BACKEND}"
+bashio::log.info "Upload destinations: nextcloud=${UPLOAD_NEXTCLOUD} seafile=${UPLOAD_SEAFILE} paperless=${UPLOAD_PAPERLESS}"
 bashio::log.info "Configured scan mode: profile=${SCAN_PROFILE} | color: ${SCAN_COLOR} | duplex: ${SCAN_DUPLEX}"
 bashio::log.info "Document processing profile: ${PROCESSING_PROFILE}"
 bashio::log.info "Archive raw scans: ${ARCHIVE_RAW_SCANS} (${RAW_SCAN_ARCHIVE_DIR})"
