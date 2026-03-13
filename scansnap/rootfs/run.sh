@@ -14,6 +14,7 @@ SCAN_DUPLEX=$(bashio::config 'scan_duplex')
 SCAN_COLOR=$(bashio::config 'scan_color')
 SCAN_PROFILE=$(bashio::config 'scan_profile')
 PROCESSING_PROFILE=$(bashio::config 'processing_profile')
+HA_PROFILE_ENTITY=$(bashio::config 'ha_profile_entity')
 ARCHIVE_RAW_SCANS=$(bashio::config 'archive_raw_scans')
 RAW_SCAN_ARCHIVE_DIR=$(bashio::config 'raw_scan_archive_dir')
 ACTIVE_PROFILE_FILE="/data/active_processing_profile"
@@ -66,6 +67,7 @@ UPLOAD_SEAFILE="${UPLOAD_SEAFILE}"
 UPLOAD_PAPERLESS="${UPLOAD_PAPERLESS}"
 SCAN_PROFILE="${SCAN_PROFILE}"
 PROCESSING_PROFILE="${PROCESSING_PROFILE}"
+HA_PROFILE_ENTITY="${HA_PROFILE_ENTITY}"
 ARCHIVE_RAW_SCANS="${ARCHIVE_RAW_SCANS}"
 RAW_SCAN_ARCHIVE_DIR="${RAW_SCAN_ARCHIVE_DIR}"
 ACTIVE_PROFILE_FILE="${ACTIVE_PROFILE_FILE}"
@@ -87,6 +89,7 @@ bashio::log.info "OCR language: ${OCR_LANGUAGE}"
 bashio::log.info "Upload destinations: nextcloud=${UPLOAD_NEXTCLOUD} seafile=${UPLOAD_SEAFILE} paperless=${UPLOAD_PAPERLESS}"
 bashio::log.info "Configured scan mode: profile=${SCAN_PROFILE} | color: ${SCAN_COLOR} | duplex: ${SCAN_DUPLEX}"
 bashio::log.info "Document processing profile: ${PROCESSING_PROFILE}"
+bashio::log.info "HA profile entity override: ${HA_PROFILE_ENTITY}"
 bashio::log.info "Active processing profile file: ${ACTIVE_PROFILE_FILE}"
 bashio::log.info "Archive raw scans: ${ARCHIVE_RAW_SCANS} (${RAW_SCAN_ARCHIVE_DIR})"
 bashio::log.info "Low-level scan profile: ${SCAN_PROFILE}"

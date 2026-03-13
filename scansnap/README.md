@@ -58,6 +58,7 @@ This add-on uses Nextcloud's **File Drop** feature — an upload-only share that
 |--------|---------|-------------|
 | `scan_profile` | `stable_300` | Low-level USB scan profile. `stable_300` is the normal default and `stable_600` is a fallback. |
 | `processing_profile` | `document_clean` | Post-scan page rendering profile. `document_clean` is the default for readable, analysis-friendly document output. `document_texture` preserves more of the original paper character. |
+| `ha_profile_entity` | _(empty)_ | Optional Home Assistant entity override for the active processing profile. If set, its state is read at scan time. |
 | `archive_raw_scans` | `false` | If enabled, saves each raw `page_XXXX.jpg` scan set before any rotation, blank-page removal, or OCR. |
 | `raw_scan_archive_dir` | `/share/scansnap-raw` | Where raw scan directories are archived when `archive_raw_scans` is enabled. This path is inside Home Assistant's shared folder. |
 | `ocr_language` | `eng` | Tesseract language code(s) — e.g. `eng`, `fra`, `eng+fra` |
@@ -78,6 +79,37 @@ You do not need to restart the add-on to switch between `document_clean` and `do
 - `scan.sh` reads that active profile at scan time
 
 The add-on option in Settings acts as the default profile. The ingress page lets you override it quickly for day-to-day use from a phone or tablet without opening add-on configuration.
+
+If `ha_profile_entity` is set, the add-on checks that Home Assistant entity first at scan time. Accepted states are:
+
+- `document_clean`
+- `document_texture`
+- `baseline`
+
+States like `Document Clean` and `Document Texture` are also accepted and normalized automatically.
+
+## Home Assistant Helper Integration
+
+The easiest HA-native control method is an `input_select` helper.
+
+Example helper:
+
+```yaml
+input_select:
+  scansnap_profile:
+    name: ScanSnap Profile
+    options:
+      - document_clean
+      - document_texture
+```
+
+Then set:
+
+```yaml
+ha_profile_entity: input_select.scansnap_profile
+```
+
+After that, a dashboard control or zigbee-button automation can switch the helper, and the next scan will use that profile without restarting the add-on.
 
 ## How It Works
 

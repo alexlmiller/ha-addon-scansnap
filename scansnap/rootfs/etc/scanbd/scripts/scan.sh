@@ -37,6 +37,51 @@ load_active_processing_profile() {
     fi
 }
 
+normalize_processing_profile() {
+    local raw="${1:-}"
+    raw="$(printf '%s' "${raw}" | tr '[:upper:]' '[:lower:]' | tr ' ' '_' | tr '-' '_')"
+    case "${raw}" in
+        document_clean|document_texture|baseline)
+            printf '%s' "${raw}"
+            ;;
+        *)
+            printf '%s' ""
+            ;;
+    esac
+}
+
+load_ha_processing_profile() {
+    local entity_id
+    local response
+    local state
+    local normalized
+
+    entity_id="${HA_PROFILE_ENTITY:-}"
+    if [ -z "${entity_id}" ] || [ -z "${SUPERVISOR_TOKEN:-}" ]; then
+        return 0
+    fi
+
+    response="$(curl -fsSL \
+        -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+        "http://supervisor/core/api/states/${entity_id}" 2>/dev/null || true)"
+    if [ -z "${response}" ]; then
+        return 0
+    fi
+
+    state="$(printf '%s' "${response}" | python3 -c 'import json,sys
+try:
+    data=json.load(sys.stdin)
+except Exception:
+    print("")
+    raise SystemExit(0)
+print(data.get("state",""))')"
+    normalized="$(normalize_processing_profile "${state}")"
+    if [ -n "${normalized}" ]; then
+        PROCESSING_PROFILE="${normalized}"
+        log "HA processing profile override: ${PROCESSING_PROFILE} (from ${entity_id})"
+    fi
+}
+
 ocr_args() {
     printf '%s\n' \
         --rotate-pages \
@@ -339,6 +384,7 @@ log "Kept ${KEPT_COUNT} page(s) after blank removal"
 
 # ── Step 4: Apply processing profile ─────────────────────────────────────────
 PROCESSING_PROFILE="${PROCESSING_PROFILE:-baseline}"
+load_ha_processing_profile
 load_active_processing_profile
 log "Processing profile: ${PROCESSING_PROFILE}"
 case "${PROCESSING_PROFILE}" in
