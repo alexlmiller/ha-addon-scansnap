@@ -58,6 +58,7 @@ This add-on uses Nextcloud's **File Drop** feature — an upload-only share that
 |--------|---------|-------------|
 | `scan_profile` | `stable_300` | Low-level USB scan profile. `stable_300` is the normal default and `stable_600` is a fallback. |
 | `ha_scan_profile_entity` | _(empty)_ | Optional Home Assistant entity override for the active scan profile. If set, its state is read at scan time. |
+| `ha_scan_color_entity` | _(empty)_ | Optional Home Assistant entity override for the active color mode. If set, its state is read at scan time. |
 | `processing_profile` | `document_clean` | Post-scan page rendering profile. `document_clean` is the default for readable, analysis-friendly document output. `document_texture` preserves more of the original paper character. |
 | `ha_profile_entity` | _(empty)_ | Optional Home Assistant entity override for the active processing profile. If set, its state is read at scan time. |
 | `archive_raw_scans` | `false` | If enabled, saves each raw `page_XXXX.jpg` scan set before any rotation, blank-page removal, or OCR. |
@@ -66,8 +67,12 @@ This add-on uses Nextcloud's **File Drop** feature — an upload-only share that
 | `scan_duplex` | `true` | Scan both sides of each page (ADF Duplex). Blank reverses are removed automatically. |
 | `scan_color` | `Color` | Color mode: `Color`, `Gray`, or `Lineart` |
 
-Current limitation: the single-owner USB scanner path is stable, but the low-level duplex/color controls are still not fully mapped to the Home Assistant options.
-`scan_profile` is the scanner-mode control that matters today. `scan_duplex` and `scan_color` are still reserved until the USB-native path is mapped more fully, so there is no HA helper override for color mode yet.
+Current limitation: the single-owner USB scanner path is stable, but the low-level duplex/color controls are still not fully mapped to the scanner hardware.
+`scan_profile` is the true scanner-mode control that matters today. `scan_color` is now honored at scan time as a post-capture page rendering mode:
+- `Color` preserves color for `baseline` and `document_texture`
+- `Gray` converts the final page images to grayscale
+- `Lineart` converts the final page images to a high-contrast black-and-white rendering
+`document_clean` still intentionally renders monochrome pages even if `scan_color` is set to `Color`.
 `processing_profile` selects between the two settled document-rendering modes; deeper local experimentation is documented in [SCAN_FORMATS.md](/Users/alex/code/ha-addon-scansnap/scansnap/SCAN_FORMATS.md).
 
 ## Switching Processing Profiles
@@ -101,6 +106,19 @@ You do not need to restart the add-on to switch between `stable_300` and `stable
 
 States like `Stable 300` and `Stable 600` are also accepted and normalized automatically.
 
+## Switching Color Modes
+
+You do not need to restart the add-on to switch between `Color`, `Gray`, and `Lineart`.
+
+- Set `ha_scan_color_entity` to a Home Assistant helper entity
+- The add-on reads that helper's state at scan time
+- Accepted states are:
+  - `Color`
+  - `Gray`
+  - `Lineart`
+
+States like `grayscale`, `grey`, `bw`, and `black white` are also accepted and normalized automatically.
+
 ## Home Assistant Helper Integration
 
 The easiest HA-native control method is an `input_select` helper.
@@ -119,6 +137,12 @@ input_select:
     options:
       - stable_300
       - stable_600
+  scansnap_color:
+    name: ScanSnap Color
+    options:
+      - Color
+      - Gray
+      - Lineart
 ```
 
 Then set:
@@ -126,6 +150,7 @@ Then set:
 ```yaml
 ha_profile_entity: input_select.scansnap_profile
 ha_scan_profile_entity: input_select.scansnap_dpi
+ha_scan_color_entity: input_select.scansnap_color
 ```
 
 After that, a dashboard control or zigbee-button automation can switch either helper, and the next scan will use those values without restarting the add-on.

@@ -1,6 +1,6 @@
 name: "ScanSnap iX500"
 description: "One-button duplex OCR scanning to configurable storage backends"
-version: "1.1.4"
+version: "1.1.5"
 slug: "scansnap_ix500"
 init: false
 arch:
@@ -28,6 +28,7 @@ options:
   # Scan and OCR settings
   scan_profile: "stable_300"
   ha_scan_profile_entity: ""
+  ha_scan_color_entity: ""
   processing_profile: "document_clean"
   ha_profile_entity: ""
   archive_raw_scans: false
@@ -51,6 +52,7 @@ schema:
   # Scan and OCR settings
   scan_profile: list(stable_300|stable_600)
   ha_scan_profile_entity: str?
+  ha_scan_color_entity: str?
   processing_profile: list(document_clean|document_texture)
   ha_profile_entity: str?
   archive_raw_scans: bool

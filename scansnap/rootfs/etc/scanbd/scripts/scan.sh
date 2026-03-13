@@ -37,12 +37,48 @@ load_active_processing_profile() {
     fi
 }
 
+load_active_scan_color() {
+    local color_file
+    local active_color
+
+    color_file="${ACTIVE_SCAN_COLOR_FILE:-/data/active_scan_color}"
+    if [ -f "${color_file}" ]; then
+        active_color="$(tr -d '\r\n' < "${color_file}")"
+        active_color="$(normalize_scan_color "${active_color}")"
+        case "${active_color}" in
+            Color|Gray|Lineart)
+                SCAN_COLOR="${active_color}"
+                log "Active scan color override: ${SCAN_COLOR}"
+                ;;
+        esac
+    fi
+}
+
 normalize_processing_profile() {
     local raw="${1:-}"
     raw="$(printf '%s' "${raw}" | tr '[:upper:]' '[:lower:]' | tr ' ' '_' | tr '-' '_')"
     case "${raw}" in
         document_clean|document_texture|baseline)
             printf '%s' "${raw}"
+            ;;
+        *)
+            printf '%s' ""
+            ;;
+    esac
+}
+
+normalize_scan_color() {
+    local raw="${1:-}"
+    raw="$(printf '%s' "${raw}" | tr '[:upper:]' '[:lower:]' | tr -d ' _-')"
+    case "${raw}" in
+        color|colour)
+            printf '%s' "Color"
+            ;;
+        gray|grey|grayscale|greyscale)
+            printf '%s' "Gray"
+            ;;
+        lineart|line|bw|bilevel|blackwhite)
+            printf '%s' "Lineart"
             ;;
         *)
             printf '%s' ""
@@ -79,6 +115,38 @@ print(data.get("state",""))')"
     if [ -n "${normalized}" ]; then
         PROCESSING_PROFILE="${normalized}"
         log "HA processing profile override: ${PROCESSING_PROFILE} (from ${entity_id})"
+    fi
+}
+
+load_ha_scan_color() {
+    local entity_id
+    local response
+    local state
+    local normalized
+
+    entity_id="${HA_SCAN_COLOR_ENTITY:-}"
+    if [ -z "${entity_id}" ] || [ -z "${SUPERVISOR_TOKEN:-}" ]; then
+        return 0
+    fi
+
+    response="$(curl -fsSL \
+        -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+        "http://supervisor/core/api/states/${entity_id}" 2>/dev/null || true)"
+    if [ -z "${response}" ]; then
+        return 0
+    fi
+
+    state="$(printf '%s' "${response}" | python3 -c 'import json,sys
+try:
+    data=json.load(sys.stdin)
+except Exception:
+    print("")
+    raise SystemExit(0)
+print(data.get("state",""))')"
+    normalized="$(normalize_scan_color "${state}")"
+    if [ -n "${normalized}" ]; then
+        SCAN_COLOR="${normalized}"
+        log "HA scan color override: ${SCAN_COLOR} (from ${entity_id})"
     fi
 }
 
@@ -382,7 +450,13 @@ if [ "${KEPT_COUNT}" -eq 0 ]; then
 fi
 log "Kept ${KEPT_COUNT} page(s) after blank removal"
 
-# ── Step 4: Apply processing profile ─────────────────────────────────────────
+# ── Step 4: Resolve runtime scan color mode ──────────────────────────────────
+SCAN_COLOR="${SCAN_COLOR:-Color}"
+load_active_scan_color
+load_ha_scan_color
+log "Scan color mode: ${SCAN_COLOR}"
+
+# ── Step 5: Apply processing profile ─────────────────────────────────────────
 PROCESSING_PROFILE="${PROCESSING_PROFILE:-baseline}"
 load_active_processing_profile
 load_ha_processing_profile
@@ -390,6 +464,17 @@ log "Processing profile: ${PROCESSING_PROFILE}"
 case "${PROCESSING_PROFILE}" in
     baseline)
         log "Using baseline page processing (no extra image cleanup)"
+        ;;
+    document_texture)
+        if [ "${SCAN_COLOR}" = "Color" ]; then
+            log "Cleaning page backgrounds with profile: document_texture_color"
+            "${SCRIPT_BIN_DIR}/clean_document_pages.py" document_texture_color "${PAGE_FILES[@]}" \
+                || fail "document page cleanup failed"
+        else
+            log "Cleaning page backgrounds with profile: ${PROCESSING_PROFILE}"
+            "${SCRIPT_BIN_DIR}/clean_document_pages.py" "${PROCESSING_PROFILE}" "${PAGE_FILES[@]}" \
+                || fail "document page cleanup failed"
+        fi
         ;;
     document_clean|document_texture|gray_light|gray_soft|gray_denoise|gray_denoise_text|gray_denoise_text_strong|gray_text_boost|gray_light_text|gray_light_denoise_text|gray_bg_soft|gray_bg_soft_text|gray_bg_flatten|restore_gray|restore_soft_bw|restore_soft_bw_cleaner|restore_clean_bw|restore_text_mask|restore_text_mask_soft)
         log "Cleaning page backgrounds with profile: ${PROCESSING_PROFILE}"
@@ -401,14 +486,31 @@ case "${PROCESSING_PROFILE}" in
         ;;
 esac
 
-# ── Step 5: Assemble lossless PDF ────────────────────────────────────────────
+# ── Step 6: Apply requested color mode to output pages ───────────────────────
+case "${SCAN_COLOR}" in
+    Color)
+        if [ "${PROCESSING_PROFILE}" = "document_clean" ]; then
+            log "Color mode requested, but document_clean intentionally renders monochrome pages"
+        fi
+        ;;
+    Gray|Lineart)
+        log "Applying ${SCAN_COLOR} output mode to page images"
+        "${SCRIPT_BIN_DIR}/apply_scan_color_mode.py" "${SCAN_COLOR}" "${PAGE_FILES[@]}" \
+            || fail "scan color conversion failed"
+        ;;
+    *)
+        fail "Unsupported scan color mode: ${SCAN_COLOR}"
+        ;;
+esac
+
+# ── Step 7: Assemble lossless PDF ────────────────────────────────────────────
 RAW_PDF="${WORKDIR}/raw.pdf"
 log "Assembling PDF with img2pdf..."
 IFS=$'\n' PAGE_FILES=($(printf '%s\n' "${PAGE_FILES[@]}" | sort))
 img2pdf --output "${RAW_PDF}" "${PAGE_FILES[@]}" \
     || fail "img2pdf failed"
 
-# ── Step 6: OCR ──────────────────────────────────────────────────────────────
+# ── Step 8: OCR ──────────────────────────────────────────────────────────────
 OCR_PDF="${WORKDIR}/ocr.pdf"
 log "Running OCR (language: ${OCR_LANGUAGE:-eng})..."
 
@@ -418,7 +520,7 @@ ocrmypdf \
     "${RAW_PDF}" "${OCR_PDF}" \
     || fail "ocrmypdf failed"
 
-# ── Step 7: Generate smart filename ──────────────────────────────────────────
+# ── Step 9: Generate smart filename ──────────────────────────────────────────
 log "Extracting text for filename..."
 
 # Extract first 3000 chars from OCR'd PDF for analysis
@@ -426,10 +528,10 @@ TEXT=$(pdftotext "${OCR_PDF}" - 2>/dev/null | head -c 3000 || true)
 FILENAME=$(echo "${TEXT}" | "${SCRIPT_BIN_DIR}/name_from_ocr.py")
 log "Filename: ${FILENAME}"
 
-# ── Step 8: Upload to configured destination ─────────────────────────────────
+# ── Step 10: Upload to configured destination ────────────────────────────────
 if ! upload_pdf; then
     fail "One or more uploads failed — check destination configuration"
 fi
 
-# ── Step 9: Success ───────────────────────────────────────────────────────────
+# ── Step 11: Success ──────────────────────────────────────────────────────────
 log "Done."

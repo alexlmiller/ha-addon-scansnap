@@ -135,8 +135,16 @@ def clean_page(path: str, mode: str) -> None:
         aliases = {
             "document_clean": "restore_soft_bw_cleaner",
             "document_texture": "gray_denoise",
+            "document_texture_color": "color_denoise",
         }
         mode = aliases.get(mode, mode)
+
+        if mode == "color_denoise":
+            cleaned = img.convert("RGB").filter(ImageFilter.MedianFilter(size=3))
+            cleaned = ImageOps.autocontrast(cleaned, cutoff=1)
+            cleaned = cleaned.filter(ImageFilter.UnsharpMask(radius=0.8, percent=45, threshold=3))
+            cleaned.save(path, format="JPEG", quality=JPEG_QUALITY, optimize=True)
+            return
 
         cleaned = grayscale_base(img)
 
