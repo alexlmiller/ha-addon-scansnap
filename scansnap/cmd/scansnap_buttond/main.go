@@ -1,11 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 
@@ -51,9 +55,86 @@ func main() {
 }
 
 func activeScanProfile() string {
-	profile := os.Getenv("SCAN_PROFILE")
+	profile := normalizeScanProfile(os.Getenv("SCAN_PROFILE"))
 	if profile == "" {
 		return string(fss500.ProfileStable300)
+	}
+	return profile
+}
+
+func activeScanProfileFile() string {
+	if path := strings.TrimSpace(os.Getenv("ACTIVE_SCAN_PROFILE_FILE")); path != "" {
+		return path
+	}
+	return "/data/active_scan_profile"
+}
+
+func normalizeScanProfile(raw string) string {
+	raw = strings.TrimSpace(strings.ToLower(strings.ReplaceAll(raw, "-", "_")))
+	switch raw {
+	case string(fss500.ProfileStable300), string(fss500.ProfileStable600):
+		return raw
+	default:
+		return ""
+	}
+}
+
+func loadSavedScanProfile() string {
+	data, err := os.ReadFile(activeScanProfileFile())
+	if err != nil {
+		return ""
+	}
+	profile := normalizeScanProfile(string(data))
+	if profile != "" {
+		log.Printf("Active scan profile override: %s", profile)
+	}
+	return profile
+}
+
+func loadHAScanProfile() string {
+	entityID := strings.TrimSpace(os.Getenv("HA_SCAN_PROFILE_ENTITY"))
+	token := strings.TrimSpace(os.Getenv("SUPERVISOR_TOKEN"))
+	if entityID == "" || token == "" {
+		return ""
+	}
+
+	req, err := http.NewRequest(http.MethodGet, "http://supervisor/core/api/states/"+url.PathEscape(entityID), nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	var state struct {
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&state); err != nil {
+		return ""
+	}
+
+	profile := normalizeScanProfile(state.State)
+	if profile != "" {
+		log.Printf("HA scan profile override: %s (from %s)", profile, entityID)
+	}
+	return profile
+}
+
+func resolvedScanProfile() string {
+	profile := activeScanProfile()
+	if saved := loadSavedScanProfile(); saved != "" {
+		profile = saved
+	}
+	if helper := loadHAScanProfile(); helper != "" {
+		profile = helper
 	}
 	return profile
 }
@@ -103,7 +184,12 @@ func performScan(dev *usb.Device) error {
 		return err
 	}
 
-	log.Printf("Scanning to %s", workdir)
+	profile := resolvedScanProfile()
+	if err := os.Setenv("SCAN_PROFILE", profile); err != nil {
+		return fmt.Errorf("set scan profile env: %w", err)
+	}
+
+	log.Printf("Scanning to %s using profile %s", workdir, profile)
 	if err := scansnapusb.ScanToDir(dev, workdir); err != nil {
 		_ = os.RemoveAll(workdir)
 		return err
